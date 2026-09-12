@@ -3,7 +3,8 @@
      ProductIdentity в rnotify.Core — менять синхронно в трёх местах. -->
 <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
          xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
-         xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities">
+         xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+         xmlns:desktop6="http://schemas.microsoft.com/appx/manifest/desktop/windows10/6">
 
   <Identity Name="revealyan.RNotify"
             Publisher="CN=6F4182DB-0063-4273-87C8-59E15AFFCBCC"
@@ -13,6 +14,10 @@
     <DisplayName>RNotify</DisplayName>
     <PublisherDisplayName>revealyan</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
+    <!-- Flexible Virtualization (S5.2/раунд 2): сама по себе capability
+         unvirtualizedResources ниже НЕ отключает реестровую виртуализацию —
+         нужна эта пара. Без неё ключи формулы Э1 уходят в Helium\User.dat. -->
+    <desktop6:RegistryWriteVirtualization>disabled</desktop6:RegistryWriteVirtualization>
   </Properties>
 
   <Dependencies>
@@ -37,6 +42,10 @@
        автоматически); прочие capabilities добавляются только по нужде фич. -->
   <Capabilities>
     <rescap:Capability Name="runFullTrust" />
+    <!-- S5.2/раунд 2: без неё записи HKCU (ключи формулы Э1) уходят в
+         виртуальный улей пакета (Helium\User.dat) и не видны WpnService.
+         Restricted: для стора потребуется обоснование в сабмишне (S5.3). -->
+    <rescap:Capability Name="unvirtualizedResources" />
   </Capabilities>
 
 </Package>
