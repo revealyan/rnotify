@@ -26,6 +26,9 @@ powershell -ExecutionPolicy Bypass -File tools/dev-cert.ps1
 dotnet build -c Release src/rnotify
 ```
 
+(каждую команду копируйте отдельной строкой — стрелки в примерах выше только
+для связности повествования)
+
 Установка пакета и проверка identity глазами (окно показывает Name/Publisher/
 Version из манифеста):
 
