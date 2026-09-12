@@ -5,3 +5,9 @@ obj/
 *.pfx
 *.msix
 *.msixupload
+*.cer
+certs/
+artifacts/
+*.appx
+*.appxupload
+*.pkg.xml
