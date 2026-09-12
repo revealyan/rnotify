@@ -6,8 +6,7 @@ namespace rnotify;
 
 /// <summary>
 /// Точка композиции приложения. Хост тонкий: вся логика — в rnotify.Core.
-/// Шов S5.2: спайк-код (запись ключей Э1, UserNotificationListener,
-/// NotificationChanged) вставляется сюда, в OnStartup.
+/// Шов S5.2 занят: спайк packaged-режима — <see cref="Spike52"/> в OnStartup.
 /// </summary>
 [SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable",
 	Justification = "Жизненный цикл App совпадает с процессом; мьютекс освобождается в OnExit")]
@@ -31,6 +30,11 @@ public partial class App : Application
 		}
 
 		base.OnStartup(e);
+
+		// Шов S5.2: спайк packaged-режима (виртуализация ключей Э1, consent,
+		// NotificationChanged). Окно появится после возврата из OnStartup —
+		// Spike52 сам дождётся его и ведёт лог в IdentityPanel + файл.
+		Spike52.Run();
 	}
 
 	protected override void OnExit(ExitEventArgs e)
