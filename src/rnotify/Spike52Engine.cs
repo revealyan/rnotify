@@ -83,13 +83,17 @@ internal sealed class Spike52Engine
 	}
 
 	// Окно создаётся ПОСЛЕ возврата из OnStartup (StartupUri) — ждём его и
-	// подключаем панель; таймаут — деградация в «только файл».
+	// подключаем панель; таймаут — деградация в «только файл». Доступ к
+	// Application.MainWindow требует UI-поток (VerifyAccess) — только через Dispatcher.
 	private async Task WaitForMainWindowAsync()
 	{
 		DateTime deadline = DateTime.Now.AddSeconds(15);
 		while (DateTime.Now < deadline)
 		{
-			if (Application.Current?.MainWindow is MainWindow window)
+			MainWindow? window = await _dispatcher
+				.InvokeAsync(() => Application.Current?.MainWindow as MainWindow)
+				.Task.ConfigureAwait(false);
+			if (window is not null)
 			{
 				AttachPanel(window);
 				return;
