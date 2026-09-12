@@ -10,3 +10,31 @@
 - Канон ресёрча и формула Э1: `C:\devs\docs\win11-notifications-control.md` (§9–10)
 - Роадмап: [docs/stories/ROADMAP.md](docs/stories/ROADMAP.md)
 - Дистрибуция: GitHub Releases → MS Store → winget(msstore); план Б — GitHub+Certum
+
+## Сборка и установка (dev)
+
+Однократно (требует консоль с правами администратора — включает dev-mode и
+импортирует дев-сертификат в доверенные):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/dev-cert.ps1
+```
+
+Каждая сборка (сертификат на месте → пакет подписывается автоматически):
+
+```powershell
+dotnet build -c Release src/rnotify
+```
+
+Установка пакета и проверка identity глазами (окно показывает Name/Publisher/
+Version из манифеста):
+
+```powershell
+Add-AppxPackage src\rnotify\AppPackages\rnotify_0.1.0.0_x64_Test\rnotify_0.1.0.0_x64.msix
+Get-AppxPackage revealyan.RNotify        # Name/Version/Publisher
+# запуск: окно RNotify; второй запуск молча выходит (single-instance)
+Get-AppxPackage revealyan.RNotify | Remove-AppxPackage   # удаление
+```
+
+Без дев-сертификата (чистый клон, CI) пакет собирается без подписи — сборка
+остаётся зелёной.
