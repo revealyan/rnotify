@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Windows-TFM: ссылается на windows-сборки ядра и приложения. -->
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>rnotify.ArchTests</RootNamespace>
+    <!-- xunit.v3 + MTP: тест-проект — исполняемый. -->
+    <OutputType>Exe</OutputType>
+    <!-- Осознанное подавление (журнал решений в docs/stories/S5.1-skeleton.md):
+         snake_case в именах тестов — конвенция читаемых тест-имён. -->
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NetArchTest.Rules" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\rnotify.Core\rnotify.Core.csproj" />
+    <ProjectReference Include="..\..\src\rnotify\rnotify.csproj" />
+  </ItemGroup>
+
+</Project>

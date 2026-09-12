@@ -3,4 +3,7 @@
     <Project Path="src/rnotify.Core/rnotify.Core.csproj" />
     <Project Path="src/rnotify/rnotify.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/rnotify.ArchTests/rnotify.ArchTests.csproj" />
+  </Folder>
 </Solution>
