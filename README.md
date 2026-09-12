@@ -6,8 +6,8 @@
 
 **Статус**: старт 12.09.2026. Закрыты: формула Э1 (спайк), MSIX-каркас S5.1,
 packaged-спайк S5.2 (ключи Э1 из пакета — пара capability +
-`RegistryWriteVirtualization`; `NotificationChanged` живой). Далее: Э2 —
-листенер в ядре.
+`RegistryWriteVirtualization`; `NotificationChanged` живой), релизный пайплайн
+S5.3a (тег → Release, unsigned). Далее: Э2 — листенер в ядре.
 
 - Канон ресёрча и формула Э1: `C:\devs\docs\win11-notifications-control.md` (§9–10)
 - Роадмап: [docs/stories/ROADMAP.md](docs/stories/ROADMAP.md)
@@ -43,3 +43,17 @@ Get-AppxPackage revealyan.RNotify | Remove-AppxPackage   # удаление
 
 Без дев-сертификата (чистый клон, CI) пакет собирается без подписи — сборка
 остаётся зелёной.
+
+## Релизы
+
+Тег `v*` на main → [release-workflow](.github/workflows/release.yml) собирает
+MSIX (версия манифеста — из тега: `v0.1.2` → `0.1.2.0`) и вкладывает его в
+GitHub Release. Пакет без подписи: для установки на свою машину подписать
+дев-сертом (после однократного `tools/dev-cert.ps1`):
+
+```powershell
+signtool sign /fd SHA256 /f certs\rnotify-dev.pfx /p <пароль из tools/dev-cert.ps1> rnotify_0.1.0.0_x64.msix
+Add-AppxPackage .\rnotify_0.1.0.0_x64.msix
+```
+
+Релизная подпись (стор-серт или Certum) — S5.3b после Э2.

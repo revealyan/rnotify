@@ -40,6 +40,13 @@ DPI 150%), затем реализация: стек карточек, темы,
   `NotificationChanged` работает (0x80070490 не воспроизвёлся), consent —
   `Allowed` без диалога. Разбор: [S5.2-packaged-spike.md](S5.2-packaged-spike.md);
   факты: канон §10c, `spikes/SPIKE-S5.2.md`.
-- S5.3 CI: GitHub Actions → MSIX → Release; стор-сабмишн.
+- S5.3a Релизный пайплайн: тег `v*` → Actions → MSIX → GitHub Release
+  (unsigned). ✅ 13.09 — версия манифеста из тега в checkout-копии; грабля
+  `$10`-группы в regex-replacement поймана локальной рельсой до пуша
+  (элемент Identity удалялся целиком). Живой тег `v0.1.0` — по команде
+  владельца. Разбор: [S5.3a-release-pipeline.md](S5.3a-release-pipeline.md).
+- S5.3b Стор-сабмит (после Э2): Partner Center, обоснование restricted
+  declarations (`unvirtualizedResources` + `RegistryWriteVirtualization`,
+  канон §10c), релизная подпись.
 - Статус аккаунта: зарегистрирован как РФ — на сабмите может быть отказ;
   план Б: GitHub + Certum (~€60-90/год) + winget-community.

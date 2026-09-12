@@ -1,0 +1,48 @@
+name: release
+
+# Релизный пайплайн (S5.3a): тег v* -> MSIX -> GitHub Release.
+# Пакет БЕЗ подписи (pfx только локально; Certum/стор — S5.3b после Э2):
+# чужие машины его не поставят — артефакт для своих машин и будущей подписи.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      # Версия пакета — из тега: v0.1.2 -> 0.1.2.0. Правится копия манифеста
+      # в checkout (в репе версия дефолтная, теги — источник релизных версий).
+      - name: Подстановка версии из тега
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+          $manifest = 'src/rnotify/Package.appxmanifest'
+          $content = Get-Content $manifest -Raw
+          # Рельса: только ${1}/${2} — "$1$version.0$2" при $version с цифрой
+          # в начале парсится как группа $10 (несуществующая), группа 1 не
+          # упомянута -> весь матч <Identity ...> удаляется из манифеста.
+          # Ловится локально: spikes/tools/test-version-subst.ps1.
+          $content = $content -replace '(<Identity[^>]*Version=")[\d.]+(")', "`${1}$version.0`${2}"
+          Set-Content $manifest $content -NoNewline
+          "манифест: версия -> $version.0"
+
+      - run: dotnet restore rnotify.slnx
+
+      - run: dotnet build rnotify.slnx -c Release --no-restore
+
+      - run: dotnet test rnotify.slnx -c Release --no-build
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: src/rnotify/AppPackages/**/rnotify_*_x64.msix
+          generate_release_notes: true
