@@ -9,6 +9,34 @@
     <RootNamespace>rnotify</RootNamespace>
   </PropertyGroup>
 
+  <!-- MSIX с первого дня (конституция, решение 1): single-project packaging
+       через Windows App SDK; self-contained — дев-установка без runtime. -->
+  <PropertyGroup>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <Platforms>x64</Platforms>
+    <WindowsPackageType>MSIX</WindowsPackageType>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <GenerateAppxPackageOnBuild>true</GenerateAppxPackageOnBuild>
+    <!-- Подпись — только при наличии дев-сертификата (tools/dev-cert.ps1):
+         чистый клон и CI собирают пакет без подписи и остаются зелёными. -->
+    <PackageCertificateKeyFile>..\..\certs\rnotify-dev.pfx</PackageCertificateKeyFile>
+    <PackageCertificatePassword>rnotify-dev</PackageCertificatePassword>
+    <AppxPackageSigningEnabled Condition="Exists('$(PackageCertificateKeyFile)')">true</AppxPackageSigningEnabled>
+    <AppxPackageSigningEnabled Condition="!Exists('$(PackageCertificateKeyFile)')">false</AppxPackageSigningEnabled>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <AppxSymbolPackageEnabled>false</AppxSymbolPackageEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" />
+  </ItemGroup>
+
+  <!-- Шум упаковщика при живой подписи через pfx (сертификат на месте,
+       подпись наложена — предупреждения не отражают реальность). -->
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);APPX0105;APPX0107</NoWarn>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\rnotify.Core\rnotify.Core.csproj" />
   </ItemGroup>
