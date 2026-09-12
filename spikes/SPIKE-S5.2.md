@@ -46,7 +46,36 @@
 suppress-механика продукта требует `unvirtualizedResources`** (раунд 2);
 листенер в packaged лучше unpackaged-эталона: живые события есть, consent тихий.
 
-## Раунд 2 — с capability `unvirtualizedResources`
+## Раунд 2 — с capability `unvirtualizedResources` (12.09, 23:09–23:38)
 
-(заполняется после раунда: reg query снаружи, эффект «тост без баннера, но
-в хранилище», откат)
+Два под-раунда — важная развилка:
+
+### 2a. Только capability — НЕДОСТАТОЧНО
+
+`<rescap:Capability Name="unvirtualizedResources" />` в манифесте
+установленного пакета (проверено `Get-AppxPackageManifest`), но записи спайка
+по-прежнему не видны снаружи (`reg query`), read-back внутри видит (merged
+view). Грабли по пути: MakeAppx отвергает `rescap3:`/`rescap4:`-варианты
+элемента — правильное объявление обычное `rescap:Capability` с именем
+`unvirtualizedResources`.
+
+### 2b. Пара «capability + Flexible Virtualization» — работает
+
+Добавлено в `Properties` манифеста:
+
+```xml
+<desktop6:RegistryWriteVirtualization>disabled</desktop6:RegistryWriteVirtualization>
+```
+
+| # | Факт | Наблюдение |
+|---|---|---|
+| 8 | **Записи доходят до реального улья** | снаружи видны оба: контрольный `Software\revealyan\rnotify\Spike52\Probe=1` и per-app `ShowBanner=0x0` |
+| 9 | **Эффект формулы Э1 из packaged подтверждён** (пара опыт/контроль, BMP-диф зоны тостов, DPI-aware): ключ `ShowBanner=0`, записанный процессом пакета → тост в хранилище (`NotificationChanged #4`, `id=8422`), баннера нет (диф D500=0, D1500=99 ≈ шум 0); ключ удалён → баннер показан (D1500=2108). Примечание: на этой машине баннер появляется позже 500 мс (D500=0 в обоих прогонах) — точка замера не раньше ~1.5 с |
+| 10 | **Откат на Exit действует в реальном улье** | закрытие окна → оба значения удалены настоящим `DeleteValue`, машина чиста (per-app ключ = состояние до спайка) |
+| 11 | Consent/листенер раунда 1 воспроизводятся | `Allowed` без диалога; события и диф стабильны (27 уведомлений к концу раунда) |
+
+**Итог спайка**: формула Э1 применима из packaged-приложения только при паре
+`unvirtualizedResources` (capability) **+** `desktop6:RegistryWriteVirtualization=disabled`
+(Properties). Оба — restricted/особые declarations: для стора потребуется
+обоснование в сабмишне (S5.3). Листенер в packaged лучше unpackaged-эталона:
+живые события `NotificationChanged` вместо поллинга, consent тихий `Allowed`.
