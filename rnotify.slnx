@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/rnotify.Core/rnotify.Core.csproj" />
+    <Project Path="src/rnotify/rnotify.csproj" />
   </Folder>
 </Solution>
