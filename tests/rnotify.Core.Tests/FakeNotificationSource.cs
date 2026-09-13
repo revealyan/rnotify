@@ -15,11 +15,16 @@ internal sealed class FakeNotificationSource : INotificationSource
 	private readonly TaskCompletionSource<NotificationAccessStatus> _consent =
 		new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+	private readonly List<uint> _removeCalls = [];
+
 	private IReadOnlyList<NotificationRecord> _snapshot = [];
 	private Action? _onChanged;
 	private int _snapshotCalls;
 
 	public int SnapshotCalls => _snapshotCalls;
+
+	/// <summary>Id, по которым звали RemoveNotification, по порядку.</summary>
+	public IReadOnlyList<uint> RemoveCalls => _removeCalls;
 
 	/// <summary>Когда установлен — GetSnapshotAsync падает этим исключением (последующие диффы).</summary>
 	public Exception? SnapshotError { get; set; }
@@ -47,4 +52,7 @@ internal sealed class FakeNotificationSource : INotificationSource
 
 	/// <inheritdoc />
 	public void StopListening() => _onChanged = null;
+
+	/// <inheritdoc />
+	public void RemoveNotification(uint notificationId) => _removeCalls.Add(notificationId);
 }

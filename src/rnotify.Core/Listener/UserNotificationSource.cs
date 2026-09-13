@@ -42,6 +42,9 @@ public sealed class UserNotificationSource : INotificationSource
 		_onChanged = null;
 	}
 
+	/// <inheritdoc />
+	public void RemoveNotification(uint notificationId) => _listener.RemoveNotification(notificationId);
+
 	// Обычный void-хендлер (async void запрещён): мост без полезной нагрузки.
 	private void OnNotificationChanged(UserNotificationListener sender, object args) => _onChanged?.Invoke();
 
