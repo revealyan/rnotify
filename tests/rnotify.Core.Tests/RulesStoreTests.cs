@@ -73,6 +73,8 @@ public sealed class RulesStoreTests
 		store.Save(new RulesConfig { Groups = [new() { Name = "Первая" }] });
 		store.Save(new RulesConfig { Groups = [new() { Name = "Вторая" }] });
 
+		// Кириллица — живыми буквами, не \u-эскейпами: файл правится руками.
+		Assert.Contains("Вторая", File.ReadAllText(dir.RulesPath), StringComparison.Ordinal);
 		Assert.Equal("rules.json", Path.GetFileName(Assert.Single(Directory.GetFiles(dir.DirPath)))); // tmp-остатков нет
 		RulesLoadResult result = store.LoadOrDefault();
 		Assert.Equal("Вторая", Assert.Single(result.Config!.Groups).Name);

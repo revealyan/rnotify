@@ -1,3 +1,4 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using IOPath = System.IO.Path;
 
@@ -14,7 +15,9 @@ namespace rnotify.Core.Rules;
 public sealed class RulesStore
 {
 	// Файл правится руками: camelCase-запись; при чтении прощаются кириллица,
-	// комментарии, трейлинг-запятые и регистр ключей.
+	// комментарии, трейлинг-запятые и регистр ключей. UnsafeRelaxedJsonEscaping —
+	// только ЗАПИСЬ дефолта: без него кириллица имён групп уезжает в \u-эскейпы
+	// (дефолтный encoder гонит весь не-ASCII), а файл человеку править.
 	private static readonly JsonSerializerOptions _jsonOptions = new()
 	{
 		PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -22,6 +25,7 @@ public sealed class RulesStore
 		ReadCommentHandling = JsonCommentHandling.Skip,
 		AllowTrailingCommas = true,
 		WriteIndented = true,
+		Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
 	};
 
 	/// <summary>Путь к конфигу по умолчанию: %USERPROFILE%\.rnotify\rules.json.</summary>
