@@ -4,23 +4,27 @@ using System.Windows.Controls;
 using Windows.ApplicationModel;
 using rnotify.Core;
 using rnotify.Core.Listener;
+using rnotify.Core.Rules;
 
 namespace rnotify;
 
 /// <summary>
-/// Живая проверка MSIX-identity (S5.1) и поток уведомлений листенера (Э2):
-/// окно показывает Package.Current.Id, сверяет с <see cref="ProductIdentity"/>
-/// и после загрузки запускает <see cref="NotificationFeed"/>, печатая события
-/// в панель. Запуск вне пакета (F5) — так и пишет.
+/// Живая проверка MSIX-identity (S5.1), поток уведомлений листенера (Э2) и
+/// вердикты правил (Э3): окно показывает Package.Current.Id, события фида — с
+/// вердиктом правил; delete/killNative сносят нативную копию из Центра живьём.
+/// Запуск вне пакета (F5) — так и пишет.
 /// </summary>
 [SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable",
-	Justification = "Жизненный цикл _feed — окно: Dispose в OnClosed (см. прецедент App с мьютексом)")]
+	Justification = "Жизненный цикл _feed/_rulesMonitor — окно: Dispose в OnClosed (см. прецедент App с мьютексом)")]
 public partial class MainWindow : Window
 {
-	// Панель — до первого контента; фид живёт в окне (Dispose в OnClosed).
-	// Строки дублируются списком: кнопка «Скопировать всё» отдаёт их клипбордом
-	// (канал верификации для владельца — вместо скриншотов).
+	// Панель — до первого контента; фид и монитор правил живут в окне (Dispose
+	// в OnClosed). Строки дублируются списком: кнопка «Скопировать всё» отдаёт
+	// их клипбордом (канал верификации для владельца — вместо скриншотов).
 	private NotificationFeed? _feed;
+	private UserNotificationSource? _source;
+	private RulesReloader? _rules;
+	private RulesMonitor? _rulesMonitor;
 	private readonly List<(string Key, string Value)> _rows = [];
 
 	public MainWindow()
@@ -37,7 +41,10 @@ public partial class MainWindow : Window
 		ShowIdentity();
 		try
 		{
-			_feed = new NotificationFeed(new UserNotificationSource());
+			StartRules();
+
+			_source = new UserNotificationSource();
+			_feed = new NotificationFeed(_source);
 			_feed.Added += OnNotificationAdded;
 			_feed.Removed += OnNotificationRemoved;
 			_feed.SnapshotFailed += OnSnapshotFailed;
@@ -54,10 +61,34 @@ public partial class MainWindow : Window
 		}
 	}
 
+	// Правила грузятся ДО старта фида: первый же тост получает вердикт.
+	private void StartRules()
+	{
+		RulesStore store = new();
+		_rules = new RulesReloader(store);
+		if (_rules.StartupError is { } error)
+		{
+			AddRow("Правила", $"ошибка: {error.Message} — работаем на дефолте");
+		}
+		else
+		{
+			AddRow("Правила", $"{store.FilePath}: {DescribeRules(_rules.Current)}");
+		}
+
+		_rules.Reloaded += OnRulesReloaded;
+		_rulesMonitor = new RulesMonitor(store, _rules);
+	}
+
 	protected override void OnClosed(EventArgs e)
 	{
-		// Отписка до смерти Dispatcher: опаздывающий BeginInvoke на погашенном
-		// Dispatcher абортится молча.
+		// Сначала монитор и отписка: не перезагрузиться в момент разборки;
+		// опаздывающий BeginInvoke на погашенном Dispatcher абортится молча.
+		_rulesMonitor?.Dispose();
+		if (_rules is not null)
+		{
+			_rules.Reloaded -= OnRulesReloaded;
+		}
+
 		_feed?.Dispose();
 		base.OnClosed(e);
 	}
@@ -66,7 +97,14 @@ public partial class MainWindow : Window
 	// (неблокирующе; discard — прецедент спайка S5.2).
 	private void OnNotificationAdded(object? sender, NotificationAddedEventArgs e)
 	{
-		_ = Dispatcher.BeginInvoke(() => AddRow($"+ id {e.Record.Id}", Describe(e.Record)));
+		// Вердикт — один раз, здесь: движок immutable, потокобезопасен.
+		RuleVerdict verdict = _rules?.Current.Decide(e.Record) ?? RuleVerdict.CatchAll;
+		uint id = e.Record.Id;
+		string text = $"{Describe(e.Record)} ▸ {FormatVerdict(verdict)}";
+
+		// BeginInvoke ДО Remove: очередь Dispatcher FIFO, «+» всегда выше «−».
+		_ = Dispatcher.BeginInvoke(() => AddRow($"+ id {id}", text));
+		ApplyNativeRemoval(verdict, id);
 	}
 
 	private void OnNotificationRemoved(object? sender, NotificationRemovedEventArgs e)
@@ -78,6 +116,79 @@ public partial class MainWindow : Window
 	{
 		_ = Dispatcher.BeginInvoke(() => AddRow("Снапшот", $"ошибка: {e.Error.Message}"));
 	}
+
+	// Хот-релоад: движок уже подменён релоадером, окну остаётся сказать вслух.
+	private void OnRulesReloaded(object? sender, RulesReloadedEventArgs e)
+	{
+		_ = Dispatcher.BeginInvoke(() => AddRow(
+			"Правила",
+			e.Success
+				? $"перезагружено: {DescribeRules(e.Engine)}"
+				: $"ошибка: {e.Error!.Message} — работает прежний конфиг"));
+	}
+
+	// delete/killNative сносят нативную копию из Центра — управление хранилищем
+	// по правилу пользователя, не «показать и прихлопнуть» (конституция п.2).
+	// Свой снос породит Removed-дифф того же id — панель покажет «− id» следом.
+	[SuppressMessage("Design", "CA1031:Do not catch general exception types",
+		Justification = "WinRT-HRESULT на уже исчезнувшем Id не должен ронять поток событий фида (хендлер бежит в цикле диффа)")]
+	private void ApplyNativeRemoval(RuleVerdict verdict, uint id)
+	{
+		if (!verdict.RequiresNativeRemoval)
+		{
+			return;
+		}
+
+		try
+		{
+			_source?.RemoveNotification(id);
+		}
+		catch (Exception ex)
+		{
+			_ = Dispatcher.BeginInvoke(() => AddRow($"! id {id}", $"снос из Центра не удался: {ex.Message}"));
+		}
+	}
+
+	// «N правил, выброшено M: имена (причины)» — отчёт выбраковки видим, не молча.
+	private static string DescribeRules(RulesEngine engine)
+	{
+		string discarded = engine.Discarded.Count == 0
+			? string.Empty
+			: $", выброшено {engine.Discarded.Count}: {string.Join("; ", engine.Discarded.Select(DescribeDiscard))}";
+		return $"{engine.RuleCount} правил{discarded}";
+	}
+
+	private static string DescribeDiscard(DiscardedRule rule) =>
+		$"{rule.RuleName ?? "<без имени>"} ({rule.Reason})";
+
+	// «Группа/правило → mute · killNative · ttl 3m»; catch-all — «— (без правила)».
+	private static string FormatVerdict(RuleVerdict verdict)
+	{
+		if (verdict.GroupName is null && verdict.RuleName is null)
+		{
+			return "— (без правила)";
+		}
+
+		List<string> notes = [];
+		if (verdict.KillNative)
+		{
+			notes.Add("killNative");
+		}
+
+		if (verdict.Ttl is { } ttl && ttl != RulesEngine.DefaultShowTtl)
+		{
+			notes.Add($"ttl {FormatDuration(ttl)}");
+		}
+
+		string action = verdict.Action.ToString().ToLowerInvariant();
+		return notes.Count == 0
+			? $"{verdict.GroupName}/{verdict.RuleName} → {action}"
+			: $"{verdict.GroupName}/{verdict.RuleName} → {action} · {string.Join(" · ", notes)}";
+	}
+
+	private static string FormatDuration(TimeSpan ttl) => ttl.TotalMinutes >= 1
+		? $"{ttl.TotalMinutes:0.#}m"
+		: $"{ttl.TotalSeconds:0.#}s";
 
 	// AUMID · Заголовок — Тело; контент не прочитан (гипотеза 22621) — помечаем.
 	private static string Describe(NotificationRecord record)

@@ -23,4 +23,8 @@ public interface INotificationSource
 
 	/// <summary>Выключить сигнал изменений (отписка от WinRT-события).</summary>
 	public void StopListening();
+
+	/// <summary>Удалить уведомление из хранилища Центра по Id (RemoveNotification, контракт 22621).</summary>
+	/// <param name="notificationId">Id удаляемого уведомления.</param>
+	public void RemoveNotification(uint notificationId);
 }

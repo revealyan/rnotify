@@ -22,11 +22,21 @@
   рендера (решение владельца: backlog молча, решать нечего пока нет карточек);
   имя/иконка отправителя (резолв вне листенера).
 
-## Э3 — политика настроек ⏳
+## Э3 — политика правил ⏳ (S3.1 ✅)
 
-Группы фильтров; per-rule: match (regex/exact/contains) × app/title/body,
-action show/mute/delete, ttl, killNative?, click (close/focus), цвет группы.
-Формат конфига + редактор.
+- S3.1 Движок правил + конфиг v2 + хот-релоад: матч AUMID/title/body ×
+  regex/exact/contains (AND, первый матч), действия show/mute/delete, ttl,
+  killNative, цвет группы, click — вердиктом на каждое уведомление; конфиг
+  `%USERPROFILE%\.rnotify\rules.json` (руками, hot-reload 300 мс, битый файл =
+  прежний движок); живая врезка в окно — delete/killNative сносят из Центра
+  (`RemoveNotification` из packaged подтверждён живым прогоном, канон §10c).
+  ✅ 13.09 — 14 файлов Rules + 16 тестов (итого 30 зелёных); дефолт
+  CatchAll = show 5 с (непокрытое обязано быть видимым). Разбор:
+  [S3.1-rules-engine.md](S3.1-rules-engine.md).
+- Остаток Э3: редактор конфига (после выбора UI-стека в Э4); применение
+  ttl/цвета/click/overFullscreen — в рендере Э4; резолв имени/иконки
+  отправителя (AppInfo листенера без DisplayName — AUMID-матчер пока строкой
+  полного пути).
 
 ## Э4 — кастомный UI ⏳
 
