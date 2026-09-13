@@ -31,27 +31,57 @@ public sealed partial class CardWindow : Window
 
 	private readonly DispatcherTimer? _ttlTimer;
 	private bool _closing;
+	private readonly bool _placeAfterShow;
 
-	public CardWindow(int? autoTtlSeconds)
+	public CardWindow(int? autoTtlSeconds, bool addNoActivateStyle = true, bool addEntrance = true, bool addBackdrop = true, bool addPresenter = true, bool placeAtZone = true)
 	{
+		// Позиция — в ctor, ДО загрузки контента (HWND уже создан базовым
+		// ctor). Координаты — физические (DPI-aware проверками DWM; пробы
+		// без DPI-aware дают виртуализированные значения ÷scale — не верить).
+		if (placeAtZone)
+		{
+			RectInt32 wa = DisplayArea.Primary.WorkArea;
+			uint dpi = Native.GetDpiForWindow(Win32Interop.GetWindowFromWindowId(AppWindow.Id));
+			double s = dpi / 96.0;
+			int w = (int)Math.Round(372 * s);
+			int h = (int)Math.Round(124 * s);
+			int m = (int)Math.Round(12 * s);
+			AppWindow.MoveAndResize(new RectInt32(wa.X + wa.Width - w - m, wa.Y + wa.Height - h - m, w, h));
+		}
+
 		InitializeComponent();
 
-		OverlappedPresenter presenter = (OverlappedPresenter)AppWindow.Presenter;
-		presenter.IsAlwaysOnTop = true;
-		presenter.IsResizable = false;
-		presenter.SetBorderAndTitleBar(hasBorder: false, hasTitleBar: false);
+		if (addPresenter)
+		{
+			OverlappedPresenter presenter = (OverlappedPresenter)AppWindow.Presenter;
+			presenter.IsAlwaysOnTop = true;
+			presenter.IsResizable = false;
+			presenter.SetBorderAndTitleBar(hasBorder: false, hasTitleBar: false);
+		}
 
 		nint hwnd = Win32Interop.GetWindowFromWindowId(AppWindow.Id);
-		int style = Native.GetWindowLong(hwnd, GwlExStyle);
-		_ = Native.SetWindowLong(hwnd, GwlExStyle, style | WsExNoActivate | WsExToolWindow);
+		if (addNoActivateStyle)
+		{
+			int style = Native.GetWindowLong(hwnd, GwlExStyle);
+			_ = Native.SetWindowLong(hwnd, GwlExStyle, style | WsExNoActivate | WsExToolWindow);
+		}
 
 		// Материал: системный акрил на безрамочном окне (гипотеза Г3).
-		if (DesktopAcrylicController.IsSupported())
+		if (addBackdrop && DesktopAcrylicController.IsSupported())
 		{
 			SystemBackdrop = new DesktopAcrylicBackdrop();
 		}
 
-		PlaceAtToastZone(hwnd);
+		// Бисекция: тематический вход мог застрять на opacity 0.
+		if (!addEntrance)
+		{
+			Root.Transitions.Clear();
+		}
+
+		// ВАЖНО (факт WASDK 2.4): MoveAndResize ДО AppWindow.Show() оставляет
+		// окно без контента навсегда (DWM-границы есть, пикселей нет).
+		// Позиционируем строго ПОСЛЕ показа — возможен кадр в каскадной точке.
+		_placeAfterShow = placeAtZone;
 
 		// Таймер стартует после ShowNoActivate (без активации окна).
 		if (autoTtlSeconds is { } ttl)
@@ -65,15 +95,31 @@ public sealed partial class CardWindow : Window
 	/// Показ без активации: в WASDK 2.x у AppWindow.Show нет параметра activate —
 	/// не-активацию обеспечивает WS_EX_NOACTIVATE (установлен в ctor). Само
 	/// отсутствие параметра — уже факт протокола (веб-доки 1.x устарели).
+	/// Позиционирование — после Show (см. комментарий в ctor).
 	/// </summary>
 	public void ShowNoActivate()
 	{
 		AppWindow.Show();
+
+		// Факт WASDK 2.4: presenter.IsAlwaysOnTop из ctor не применяется, а
+		// внешний SetWindowPos(HWND_TOPMOST) молча откатывается — презентер
+		// энфорсит свой z-порядок. Единственное, что сработало: повторная
+		// установка свойства ПОСЛЕ показа окна.
+		if (_placeAfterShow)
+		{
+			OverlappedPresenter presenter = (OverlappedPresenter)AppWindow.Presenter;
+			presenter.IsAlwaysOnTop = true;
+		}
+
 		_ttlTimer?.Start();
 	}
 
 	// Зона нативного баннера: правый-низ рабочей области основного монитора,
-	// отступ 12 DIP → физические пиксели по DPI окна (гипотеза Г1, раунд 0).
+	// отступ 12 DIP (гипотеза Г1, раунд 0). Факты WASDK 2.4: AppWindow.
+	// MoveAndResize ставит геометрию верно, но контент окна умирает; SetWindowPos
+	// контент сохраняет, но XAML-слой WinUI делит его аргументы на DPI-скейл —
+	// эмпирика: чтобы попасть в физическую цель T, подаём T*scale (хак для
+	// одного монитора; мультимонитор — S4.2).
 	private void PlaceAtToastZone(nint hwnd)
 	{
 		double scale = Native.GetDpiForWindow(hwnd) / 96.0;
@@ -81,10 +127,13 @@ public sealed partial class CardWindow : Window
 		int height = (int)Math.Round(124 * scale);
 		int margin = (int)Math.Round(12 * scale);
 		RectInt32 workArea = DisplayArea.Primary.WorkArea;
-		AppWindow.MoveAndResize(new RectInt32(
-			workArea.X + workArea.Width - width - margin,
-			workArea.Y + workArea.Height - height - margin,
-			width, height));
+		int x = workArea.X + workArea.Width - width - margin;
+		int y = workArea.Y + workArea.Height - height - margin;
+		_ = Native.SetWindowPos(
+			hwnd, Native.HwndTopmost,
+			(int)Math.Round(x * scale), (int)Math.Round(y * scale),
+			(int)Math.Round(width * scale), (int)Math.Round(height * scale),
+			Native.SwpNoActivate | Native.SwpShowWindow);
 	}
 
 	/// <summary>Мягкий выход: fade 167 мс (Fluent «Direct Exit»), затем Close.</summary>
@@ -129,5 +178,17 @@ public sealed partial class CardWindow : Window
 
 		[System.Runtime.InteropServices.DllImport("user32.dll")]
 		internal static extern uint GetDpiForWindow(nint hWnd);
+
+		// Позиционирование карточки без AppWindow.MoveAndResize (см. PlaceAtToastZone).
+		[System.Runtime.InteropServices.DllImport("user32.dll")]
+		internal static extern bool SetWindowPos(
+			nint hWnd, nint hWndInsertAfter,
+			int x, int y, int width, int height, uint flags);
+
+		internal static readonly nint HwndTopmost = new(-1);
+		internal const uint SwpNoActivate = 0x0010;
+		internal const uint SwpShowWindow = 0x0040;
+		internal const uint SwpNoMove = 0x0002;
+		internal const uint SwpNoSize = 0x0001;
 	}
 }

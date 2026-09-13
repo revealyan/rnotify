@@ -30,7 +30,19 @@ public partial class App : Application
 			}
 
 			// ExitCodeOnLastWindowClose: закрылась карточка — вышел процесс.
-			CardWindow card = new(sticky ? null : ttl);
+			// Флаги бисекции рендера: --noex/--noentrance/--nobackdrop/--nopresenter/--nozone.
+			bool noEx = cli.Contains("--noex", StringComparer.OrdinalIgnoreCase);
+			bool noEntrance = cli.Contains("--noentrance", StringComparer.OrdinalIgnoreCase);
+			bool noBackdrop = cli.Contains("--nobackdrop", StringComparer.OrdinalIgnoreCase);
+			bool noPresenter = cli.Contains("--nopresenter", StringComparer.OrdinalIgnoreCase);
+			bool noZone = cli.Contains("--nozone", StringComparer.OrdinalIgnoreCase);
+			CardWindow card = new(
+				sticky ? null : ttl,
+				addNoActivateStyle: !noEx,
+				addEntrance: !noEntrance,
+				addBackdrop: !noBackdrop,
+				addPresenter: !noPresenter,
+				placeAtZone: !noZone);
 			card.ShowNoActivate();
 		}
 		else
