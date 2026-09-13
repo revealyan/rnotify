@@ -77,7 +77,7 @@ public sealed partial class CardWindow : Window
 	private void PlaceAtToastZone(nint hwnd)
 	{
 		double scale = Native.GetDpiForWindow(hwnd) / 96.0;
-		int width = (int)Math.Round(364 * scale);
+		int width = (int)Math.Round(372 * scale);
 		int height = (int)Math.Round(124 * scale);
 		int margin = (int)Math.Round(12 * scale);
 		RectInt32 workArea = DisplayArea.Primary.WorkArea;

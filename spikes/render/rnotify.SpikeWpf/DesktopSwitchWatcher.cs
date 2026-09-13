@@ -108,7 +108,8 @@ internal sealed class DesktopSwitchWatcher : IDisposable
 		[DllImport("user32.dll")]
 		public static extern nint DispatchMessage(ref MSG msg);
 
-		[DllImport("user32.dll")]
+		// GetCurrentThreadId живёт в kernel32, не user32 (EntryPointNotFound).
+		[DllImport("kernel32.dll")]
 		public static extern uint GetCurrentThreadId();
 
 		[DllImport("user32.dll")]
