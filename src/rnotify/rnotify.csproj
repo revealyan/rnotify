@@ -7,6 +7,8 @@
     <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
     <UseWPF>true</UseWPF>
     <RootNamespace>rnotify</RootNamespace>
+    <!-- PerMonitorV2: зона карточек в DIP на 150% без виртуализации координат. -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <!-- MSIX с первого дня (конституция, решение 1): single-project packaging
