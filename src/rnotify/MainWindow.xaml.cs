@@ -5,26 +5,34 @@ using Windows.ApplicationModel;
 using rnotify.Core;
 using rnotify.Core.Listener;
 using rnotify.Core.Rules;
+using rnotify.Render;
 
 namespace rnotify;
 
 /// <summary>
-/// Живая проверка MSIX-identity (S5.1), поток уведомлений листенера (Э2) и
-/// вердикты правил (Э3): окно показывает Package.Current.Id, события фида — с
-/// вердиктом правил; delete/killNative сносят нативную копию из Центра живьём.
-/// Запуск вне пакета (F5) — так и пишет.
+/// Живая проверка MSIX-identity (S5.1), поток уведомлений листенера (Э2),
+/// вердикты правил (Э3) и рендер карточек (Э4): окно показывает
+/// Package.Current.Id, события фида — с вердиктом; show-вердикт открывает
+/// карточку стека, delete/killNative сносят нативную копию из Центра живьём,
+/// чужой Removed гасит карточку. Запуск вне пакета (F5) — так и пишет.
 /// </summary>
 [SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable",
-	Justification = "Жизненный цикл _feed/_rulesMonitor — окно: Dispose в OnClosed (см. прецедент App с мьютексом)")]
+	Justification = "Жизненный цикл _feed/_stack/_rulesMonitor — окно: Dispose в OnClosed (см. прецедент App с мьютексом)")]
 public partial class MainWindow : Window
 {
-	// Панель — до первого контента; фид и монитор правил живут в окне (Dispose
-	// в OnClosed). Строки дублируются списком: кнопка «Скопировать всё» отдаёт
-	// их клипбордом (канал верификации для владельца — вместо скриншотов).
+	// Панель — до первого контента; фид, стек карточек и монитор правил живут в
+	// окне (Dispose в OnClosed). Строки дублируются списком: кнопка «Скопировать
+	// всё» отдаёт их клипбордом (канал верификации для владельца — вместо
+	// скриншотов).
 	private NotificationFeed? _feed;
 	private UserNotificationSource? _source;
 	private RulesReloader? _rules;
 	private RulesMonitor? _rulesMonitor;
+	private CardStack? _stack;
+	// Анти-самоснос (канон §10c): killNative = показать свою карточку И снести
+	// нативную копию — собственный Removed-дифф не должен гасить эту карточку.
+	private readonly Lock _selfRemovedGate = new();
+	private HashSet<uint> _selfRemoved = [];
 	private readonly List<(string Key, string Value)> _rows = [];
 
 	public MainWindow()
@@ -42,6 +50,12 @@ public partial class MainWindow : Window
 		try
 		{
 			StartRules();
+
+			// Стек — до старта фида: события подписываются раньше StartAsync,
+			// первый Added не должен прийти без стека. Трейс стека — всегда на
+			// Dispatcher (контракт CardStack), AddRow напрямую.
+			_stack = new CardStack();
+			_stack.Trace += OnStackTrace;
 
 			_source = new UserNotificationSource();
 			_feed = new NotificationFeed(_source);
@@ -81,8 +95,10 @@ public partial class MainWindow : Window
 
 	protected override void OnClosed(EventArgs e)
 	{
-		// Сначала монитор и отписка: не перезагрузиться в момент разборки;
-		// опаздывающий BeginInvoke на погашенном Dispatcher абортится молча.
+		// Стек — первым (карточки и вотчер стола), затем монитор и отписка:
+		// не перезагрузиться в момент разборки; опаздывающий BeginInvoke на
+		// погашенном Dispatcher абортится молча.
+		_stack?.Dispose();
 		_rulesMonitor?.Dispose();
 		if (_rules is not null)
 		{
@@ -102,14 +118,48 @@ public partial class MainWindow : Window
 		uint id = e.Record.Id;
 		string text = $"{Describe(e.Record)} ▸ {FormatVerdict(verdict)}";
 
-		// BeginInvoke ДО Remove: очередь Dispatcher FIFO, «+» всегда выше «−».
-		_ = Dispatcher.BeginInvoke(() => AddRow($"+ id {id}", text));
+		// BeginInvoke ДО Remove: очередь Dispatcher FIFO, «+» всегда выше «−»;
+		// карточка show-вердикта открывается той же посылкой (стек — контракт
+		// Dispatcher-only, e.Record/verdict замкнуты, движок immutable).
+		_ = Dispatcher.BeginInvoke(() =>
+		{
+			AddRow($"+ id {id}", text);
+			if (verdict.Action == RuleAction.Show)
+			{
+				_stack?.Show(e.Record, verdict);
+			}
+		});
 		ApplyNativeRemoval(verdict, id);
 	}
 
 	private void OnNotificationRemoved(object? sender, NotificationRemovedEventArgs e)
 	{
-		_ = Dispatcher.BeginInvoke(() => AddRow($"− id {e.Id}", string.Empty));
+		// «− id» и гашение карточки — только для ЧУЖОГО сноса (юзер из Центра,
+		// вытеснение хранилища); собственный killNative/delete-снос отфильтрован
+		// (Remove=true = id был в сетке наших сносов), иначе гасил бы только что
+		// показанную карточку.
+		bool wasSelfRemoved;
+		lock (_selfRemovedGate)
+		{
+			wasSelfRemoved = _selfRemoved.Remove(e.Id);
+		}
+
+		if (wasSelfRemoved)
+		{
+			return;
+		}
+
+		_ = Dispatcher.BeginInvoke(() =>
+		{
+			AddRow($"− id {e.Id}", string.Empty);
+			_stack?.CloseById(e.Id);
+		});
+	}
+
+	// Трейс стека карточек (контракт: событие всегда на Dispatcher).
+	private void OnStackTrace(object? sender, CardTraceEventArgs e)
+	{
+		AddRow("Стек", e.Message);
 	}
 
 	private void OnSnapshotFailed(object? sender, NotificationFailedEventArgs e)
@@ -129,7 +179,9 @@ public partial class MainWindow : Window
 
 	// delete/killNative сносят нативную копию из Центра — управление хранилищем
 	// по правилу пользователя, не «показать и прихлопнуть» (конституция п.2).
-	// Свой снос породит Removed-дифф того же id — панель покажет «− id» следом.
+	// Id помечается ДО вызова (intent-first): собственный Removed-дифф прилетает
+	// из пула и может обогнать возврат RemoveNotification — без пометки нарушили
+	// бы порядок «+» выше «−» и погасили killNative-карточку её же сносом.
 	[SuppressMessage("Design", "CA1031:Do not catch general exception types",
 		Justification = "WinRT-HRESULT на уже исчезнувшем Id не должен ронять поток событий фида (хендлер бежит в цикле диффа)")]
 	private void ApplyNativeRemoval(RuleVerdict verdict, uint id)
@@ -139,12 +191,22 @@ public partial class MainWindow : Window
 			return;
 		}
 
+		lock (_selfRemovedGate)
+		{
+			_ = _selfRemoved.Add(id);
+		}
+
 		try
 		{
 			_source?.RemoveNotification(id);
 		}
 		catch (Exception ex)
 		{
+			lock (_selfRemovedGate)
+			{
+				_ = _selfRemoved.Remove(id);
+			}
+
 			_ = Dispatcher.BeginInvoke(() => AddRow($"! id {id}", $"снос из Центра не удался: {ex.Message}"));
 		}
 	}

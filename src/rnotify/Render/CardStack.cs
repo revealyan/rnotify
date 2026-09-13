@@ -1,7 +1,6 @@
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
-using System.Windows.Threading;
 using rnotify.Core.Listener;
 using rnotify.Core.Rules;
 
@@ -11,41 +10,24 @@ namespace rnotify.Render;
 /// Стек карточек: свежая — снизу в зоне нативного баннера, старые уезжают
 /// вверх шагом 140 DIP, максимум 3 (нативное поведение); 4-я вытесняет
 /// старейшую. Контракт: все вызовы — на Dispatcher (события фида приходят
-/// из пула — MainWindow маршалит). Смена стола: событие приходит ДО
-/// завершения переключения, поэтому пересоздание sticky — по дебаунсу
-/// 250 мс (канон §9; в спайке дебаунса не было — порт с обязательной
-/// добавкой). TTL-карточки не пересоздаются: пересоздание перезапустило бы
-/// таймер, продлевая жизнь коротким уведомлениям.
+/// из пула — MainWindow маршалит). Столы: оверлей-карточка (Topmost,
+/// WS_EX_NOACTIVATE, ShowActivated=False) видна на всех виртуальных столах
+/// сама — слежение и пересоздание не нужны (канон §9, факт 14.09);
+/// EVENT_SYSTEM_DESKTOP_SWITCH на 26200.9168 не прилетает вовсе.
 /// </summary>
 internal sealed class CardStack : IDisposable
 {
 	internal const int MaxCards = 3;
 	internal const int StackStepDip = 140;
-	private static readonly TimeSpan _switchDebounceDelay = TimeSpan.FromMilliseconds(250);
 
 	private readonly List<Entry> _cards = []; // порядок: старейшая → свежая
-	private readonly DesktopSwitchWatcher _watcher = new();
-	private readonly DispatcherTimer _debounceTimer;
-	private readonly Dispatcher _dispatcher;
 	private bool _disposed;
 
 	/// <summary>Жизнь стека для панели диагностики.</summary>
 	internal event EventHandler<CardTraceEventArgs>? Trace;
 
 	// FocusHandler хранится в записи: замыкание на карточку нужно и для отписки.
-	private sealed record Entry(CardWindow Card, NotificationRecord Record, RuleVerdict Verdict, EventHandler FocusHandler);
-
-	public CardStack()
-	{
-		_dispatcher = Dispatcher.CurrentDispatcher; // стек создаётся на UI-потоке
-		_debounceTimer = new DispatcherTimer { Interval = _switchDebounceDelay };
-		_debounceTimer.Tick += (_, _) =>
-		{
-			_debounceTimer.Stop();
-			RecreateStickyForDesktop();
-		};
-		_watcher.DesktopSwitched += OnDesktopSwitched;
-	}
+	private sealed record Entry(CardWindow Card, NotificationRecord Record, EventHandler FocusHandler);
 
 	/// <summary>Показать карточку по show-вердикту (свежая — снизу).</summary>
 	internal void Show(NotificationRecord record, RuleVerdict verdict)
@@ -59,7 +41,7 @@ internal sealed class CardStack : IDisposable
 
 		CardWindow card = new(record, verdict, accent, offsetDip: 0);
 		EventHandler handler = (_, _) => OnFocusRequested(card);
-		Entry entry = new(card, record, verdict, handler);
+		Entry entry = new(card, record, handler);
 		card.FocusRequested += handler;
 		card.Closed += OnCardClosed;
 		_cards.Add(entry);
@@ -119,39 +101,6 @@ internal sealed class CardStack : IDisposable
 		Entry? entry = _cards.Find(x => ReferenceEquals(x.Card, card));
 		_ = VictimFocus.TryFocus(entry?.Record.Aumid, out string detail);
 		Trace?.Invoke(this, new CardTraceEventArgs($"фокус (id {entry?.Record.Id}): {detail}")); // отказ эвристики не меняет поведение
-	}
-
-	// Событие стола — в потоке насоса; пересоздание строго по дебаунсу.
-	private void OnDesktopSwitched(object? sender, EventArgs e)
-		=> _ = _dispatcher.BeginInvoke(() =>
-		{
-			_debounceTimer.Stop();
-			_debounceTimer.Start();
-		});
-
-	private void RecreateStickyForDesktop()
-	{
-		List<Entry> sticky = [.. _cards.Where(e => e.Card.IsSticky)];
-		if (sticky.Count == 0)
-		{
-			return;
-		}
-
-		foreach (Entry entry in sticky)
-		{
-			Detach(entry);
-			_cards.Remove(entry);
-			entry.Card.Close(); // хард, без fade: окно осталось на старом столе, не видно
-		}
-
-		Relayout();
-		foreach (Entry entry in sticky)
-		{
-			Show(entry.Record, entry.Verdict); // тот же снапшот вердикта
-		}
-
-		Trace?.Invoke(this, new CardTraceEventArgs(
-			$"столы: пересоздано sticky {sticky.Count} (дебаунс {_switchDebounceDelay.TotalMilliseconds:0} мс)"));
 	}
 
 	// Пересборка позиций: индекс от свежей (0 — низ зоны) × шаг вверх.
@@ -223,9 +172,6 @@ internal sealed class CardStack : IDisposable
 		}
 
 		_disposed = true;
-		_debounceTimer.Stop();
-		_watcher.DesktopSwitched -= OnDesktopSwitched;
-		_watcher.Dispose();
 		foreach (Entry entry in _cards)
 		{
 			Detach(entry);

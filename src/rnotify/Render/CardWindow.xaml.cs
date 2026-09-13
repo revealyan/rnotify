@@ -27,9 +27,6 @@ public partial class CardWindow : Window
 
 	internal uint NotificationId => _record.Id;
 
-	/// <summary>Sticky (без TTL) — единственные, кого стек пересоздаёт по смене стола.</summary>
-	internal bool IsSticky => _verdict.Ttl is null;
-
 	private readonly NotificationRecord _record;
 	private readonly RuleVerdict _verdict;
 	private readonly int _offsetDip;
