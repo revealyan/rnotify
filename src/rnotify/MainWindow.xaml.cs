@@ -18,7 +18,10 @@ namespace rnotify;
 public partial class MainWindow : Window
 {
 	// Панель — до первого контента; фид живёт в окне (Dispose в OnClosed).
+	// Строки дублируются списком: кнопка «Скопировать всё» отдаёт их клипбордом
+	// (канал верификации для владельца — вместо скриншотов).
 	private NotificationFeed? _feed;
+	private readonly List<(string Key, string Value)> _rows = [];
 
 	public MainWindow()
 	{
@@ -121,8 +124,25 @@ public partial class MainWindow : Window
 		}
 	}
 
+	// Копирует все строки панели в клипборд одной пачкой (владелец вставляет их
+	// в сессию Claude). Буфер может быть занят чужим процессом — ExternalException.
+	private void OnCopyClick(object sender, RoutedEventArgs e)
+	{
+		CopyButton.Content = "Скопировать всё";
+		try
+		{
+			Clipboard.SetText(string.Join(Environment.NewLine, _rows.Select(r => $"{r.Key} = {r.Value}")));
+			CopyButton.Content = $"Скопировано ({_rows.Count})";
+		}
+		catch (System.Runtime.InteropServices.ExternalException ex)
+		{
+			CopyButton.Content = $"Не вышло: {ex.Message}";
+		}
+	}
+
 	private void AddRow(string key, string value)
 	{
+		_rows.Add((key, value));
 		var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 2) };
 		row.Children.Add(new TextBlock { Text = key, Width = 180, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
 		row.Children.Add(new TextBlock { Text = value, TextWrapping = TextWrapping.Wrap });
