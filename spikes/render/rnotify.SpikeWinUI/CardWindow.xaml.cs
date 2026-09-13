@@ -33,7 +33,7 @@ public sealed partial class CardWindow : Window
 	private bool _closing;
 	private readonly bool _placeAfterShow;
 
-	public CardWindow(int? autoTtlSeconds, bool addNoActivateStyle = true, bool addEntrance = true, bool addBackdrop = true, bool addPresenter = true, bool placeAtZone = true)
+	public CardWindow(int? autoTtlSeconds, bool addNoActivateStyle = true, bool addEntrance = true, bool addBackdrop = true, bool addPresenter = true, bool placeAtZone = true, int offsetDip = 0)
 	{
 		// Позиция — в ctor, ДО загрузки контента (HWND уже создан базовым
 		// ctor). Координаты — физические (DPI-aware проверками DWM; пробы
@@ -46,7 +46,8 @@ public sealed partial class CardWindow : Window
 			int w = (int)Math.Round(372 * s);
 			int h = (int)Math.Round(124 * s);
 			int m = (int)Math.Round(12 * s);
-			AppWindow.MoveAndResize(new RectInt32(wa.X + wa.Width - w - m, wa.Y + wa.Height - h - m, w, h));
+			int dy = (int)Math.Round(offsetDip * s);
+			AppWindow.MoveAndResize(new RectInt32(wa.X + wa.Width - w - m, wa.Y + wa.Height - h - m - dy, w, h));
 		}
 
 		InitializeComponent();

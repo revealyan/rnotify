@@ -29,6 +29,14 @@ public partial class App : Application
 				ttl = parsed;
 			}
 
+				// Сдвиг вверх (DIP) — сцены «стопкой» рядом с нативным баннером.
+				int offset = 0;
+				int oi = cli.IndexOf("--offset");
+				if (oi >= 0 && oi + 1 < cli.Count && int.TryParse(cli[oi + 1], out int parsedOffset))
+				{
+					offset = parsedOffset;
+				}
+
 			// ExitCodeOnLastWindowClose: закрылась карточка — вышел процесс.
 			// Флаги бисекции рендера: --noex/--noentrance/--nobackdrop/--nopresenter/--nozone.
 			bool noEx = cli.Contains("--noex", StringComparer.OrdinalIgnoreCase);
@@ -42,7 +50,8 @@ public partial class App : Application
 				addEntrance: !noEntrance,
 				addBackdrop: !noBackdrop,
 				addPresenter: !noPresenter,
-				placeAtZone: !noZone);
+				placeAtZone: !noZone,
+				offsetDip: offset);
 			card.ShowNoActivate();
 		}
 		else

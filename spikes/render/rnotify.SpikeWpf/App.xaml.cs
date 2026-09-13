@@ -26,7 +26,15 @@ public partial class App : Application
 				ttl = parsed;
 			}
 
-			CardWindow card = new() { AutoTtlSeconds = sticky ? null : ttl };
+			// Сдвиг вверх (DIP) — для сцен «стопкой» рядом с нативным баннером.
+			int offset = 0;
+			int offsetIndex = args.IndexOf("--offset");
+			if (offsetIndex >= 0 && offsetIndex + 1 < args.Count && int.TryParse(args[offsetIndex + 1], out int parsedOffset))
+			{
+				offset = parsedOffset;
+			}
+
+			CardWindow card = new(offset) { AutoTtlSeconds = sticky ? null : ttl };
 			card.Closed += (_, _) => Shutdown();
 			card.Show();
 		}

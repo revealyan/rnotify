@@ -26,10 +26,12 @@ public partial class CardWindow : Window
 
 	private DispatcherTimer? _ttlTimer;
 	private bool _closing;
+	private readonly int _offsetDip;
 
-	public CardWindow()
+	public CardWindow(int offsetDip = 0)
 	{
 		InitializeComponent();
+		_offsetDip = offsetDip;
 		Loaded += OnLoaded;
 		PlaceAtToastZone();
 	}
@@ -37,10 +39,11 @@ public partial class CardWindow : Window
 	// Позиция: правый-нижний угол рабочей области основного монитора, отступ 12
 	// DIP — зона нативного баннера (уточняется раундом 0, гипотеза Г1).
 	// Left/Top окна — в DIP: PMv2-манифест, WPF считает масштаб сам.
+	// offsetDip — сдвиг вверх для сцен «стопкой».
 	private void PlaceAtToastZone()
 	{
 		Left = SystemParameters.WorkArea.Right - Width - 12;
-		Top = SystemParameters.WorkArea.Bottom - Height - 12;
+		Top = SystemParameters.WorkArea.Bottom - Height - 12 - _offsetDip;
 	}
 
 	protected override void OnSourceInitialized(EventArgs e)
