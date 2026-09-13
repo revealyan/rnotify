@@ -1,0 +1,36 @@
+<Window
+    x:Class="rnotify.SpikeWinUI.CardWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="SpikeWinUI card">
+    <!-- Контент карточки: прозрачный фон — материал даёт SystemBackdrop
+         (DesktopAcrylicBackdrop, гипотеза Г3). Вход — EntranceThemeTransition. -->
+    <Grid x:Name="Root" Margin="4" CornerRadius="8" Tapped="OnCardTapped">
+        <Grid.Transitions>
+            <TransitionCollection>
+                <EntranceThemeTransition FromHorizontalOffset="40" FromVerticalOffset="24" IsStaggeringEnabled="False" />
+            </TransitionCollection>
+        </Grid.Transitions>
+        <Border Background="#221C1C22" BorderBrush="#44FFFFFF" BorderThickness="1" CornerRadius="8" />
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Border Grid.Column="0" Width="36" Height="36" CornerRadius="6"
+                    Background="#33FFFFFF" Margin="14,0,0,0" VerticalAlignment="Center">
+                <TextBlock Text="🔔" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <StackPanel Grid.Column="1" Margin="12,12,8,12" VerticalAlignment="Center" Spacing="2">
+                <TextBlock Text="Windows PowerShell" Foreground="#B8FFFFFF" FontSize="11" />
+                <TextBlock Text="S4.1 spike · WinUI 3" Foreground="White" FontSize="14" FontWeight="SemiBold" />
+                <TextBlock Text="DesktopAcrylicBackdrop, Entrance 250 мс" Foreground="#CCFFFFFF" FontSize="12" TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+            <Button Grid.Column="2" x:Name="CloseButton" Click="OnCloseClick" Width="28" Height="28"
+                    Margin="0,6,6,0" VerticalAlignment="Top" HorizontalAlignment="Right"
+                    Background="Transparent" BorderThickness="0" Foreground="#AAFFFFFF"
+                    Content="✕" FontSize="11" />
+        </Grid>
+    </Grid>
+</Window>
