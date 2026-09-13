@@ -7,7 +7,9 @@
 **Статус**: старт 12.09.2026. Закрыты: формула Э1 (спайк), MSIX-каркас S5.1,
 packaged-спайк S5.2 (ключи Э1 из пакета — пара capability +
 `RegistryWriteVirtualization`; `NotificationChanged` живой), релизный пайплайн
-S5.3a (тег → Release, unsigned). Далее: Э2 — листенер в ядре.
+S5.3a (тег → Release, unsigned), листенер в ядре S2.1 (события, контент
+22621 — packaged подтверждён живым прогоном, backlog-фильтр). Далее: Э3 —
+политика правил; floor-анти-дубли — вместе с рендером Э4.
 
 - Канон ресёрча и формула Э1: `C:\devs\docs\win11-notifications-control.md` (§9–10)
 - Роадмап: [docs/stories/ROADMAP.md](docs/stories/ROADMAP.md)

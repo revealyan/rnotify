@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Windows-TFM: ядро тянет WinRT-проекцию листенера. -->
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>rnotify.Core.Tests</RootNamespace>
+    <!-- xunit.v3 + MTP: тест-проект — исполняемый. -->
+    <OutputType>Exe</OutputType>
+    <!-- snake_case тест-имёна — конвенция (прецедент rnotify.ArchTests, S5.1). -->
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\rnotify.Core\rnotify.Core.csproj" />
+  </ItemGroup>
+
+</Project>
