@@ -5,5 +5,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/rnotify.ArchTests/rnotify.ArchTests.csproj" />
+    <Project Path="tests/rnotify.Core.Tests/rnotify.Core.Tests.csproj" />
   </Folder>
 </Solution>
