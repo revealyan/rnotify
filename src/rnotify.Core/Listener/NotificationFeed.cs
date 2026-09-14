@@ -64,18 +64,18 @@ public sealed class NotificationFeed : IDisposable
 		{
 			// Диалог не отвечен: наблюдение позднего ответа из спайка выкинуто
 			// сознательно (диагностика, не продукт) — перезапуск приложения решает.
-			return new ListenerStartResult(NotificationAccessStatus.TimedOut, BaselineCount: 0);
+			return new ListenerStartResult(NotificationAccessStatus.TimedOut, BaselineCount: 0, Baseline: []);
 		}
 
 		NotificationAccessStatus status = await request.ConfigureAwait(false);
 		if (status != NotificationAccessStatus.Allowed)
 		{
-			return new ListenerStartResult(status, BaselineCount: 0);
+			return new ListenerStartResult(status, BaselineCount: 0, Baseline: []);
 		}
 
 		_source.StartListening(OnSourceChanged);
 		DiffResult baseline = await DiffAsync(raiseEvents: false).ConfigureAwait(false);
-		return new ListenerStartResult(status, baseline.Count);
+		return new ListenerStartResult(status, baseline.Count, baseline.Added);
 	}
 
 	/// <summary>Отписка от источника и освобождение семафора; события больше не поднимаются.</summary>

@@ -42,6 +42,7 @@ public partial class MainWindow : Window
 	private CardStack? _stack;
 	private NativeBannerSuppressor? _suppressor;
 	private TrayIcon? _tray;
+	private NotificationFloor? _floor;
 	private AppSettingsStore? _settingsStore;
 	private AppSettings _settings = new();
 	// S6.1: закрытие окна = свернуть в трей; настоящий выход (меню трея
@@ -90,6 +91,10 @@ public partial class MainWindow : Window
 		{
 			StartRules();
 
+			// Floor «что уже обработано» — до фида: догонялка после старта
+			// сверяет backlog по нему (S6.4).
+			_floor = new NotificationFloor();
+
 			// Стек — до старта фида: события подписываются раньше StartAsync,
 			// первый Added не должен прийти без стека. Трейс стека — всегда на
 			// Dispatcher (контракт CardStack), AddRow напрямую.
@@ -109,6 +114,7 @@ public partial class MainWindow : Window
 			AddRow("Baseline", $"{start.BaselineCount} уведомл. пропущено (backlog)");
 
 			StartSuppression(start.Status);
+			CatchUpMissed(start.Baseline);
 		}
 		catch (Exception ex)
 		{
@@ -126,14 +132,25 @@ public partial class MainWindow : Window
 		Justification = "Граница UI: сбой применения формулы показываем строкой и живём на нативных баннерах")]
 	private void StartSuppression(NotificationAccessStatus consent)
 	{
+		// Супрессор — всегда (S6.4): починка маркера краха обязана случиться и
+		// без применения формулы, иначе баннеры юзера останутся погашенными.
+		_suppressor = new NativeBannerSuppressor(new RegistryNotificationSettings());
+		_suppressor.Trace += OnSuppressionTrace;
+		try
+		{
+			_suppressor.TryRepairMarker();
+		}
+		catch (Exception ex)
+		{
+			AddRow("Э1", $"починка маркера не удалась: {ex.Message} — маркер оставлен, следующий старт попробует снова");
+		}
+
 		if (consent != NotificationAccessStatus.Allowed && !_settings.SuppressWithoutListener)
 		{
 			AddRow("Э1", $"consent {consent} — нативные баннеры не гасим");
 			return;
 		}
 
-		_suppressor = new NativeBannerSuppressor(new RegistryNotificationSettings());
-		_suppressor.Trace += OnSuppressionTrace;
 		try
 		{
 			_suppressor.Apply();
@@ -141,9 +158,6 @@ public partial class MainWindow : Window
 		catch (Exception ex)
 		{
 			AddRow("Э1", $"не применена: {ex.Message} — нативные баннеры остаются");
-			_suppressor.Trace -= OnSuppressionTrace;
-			_suppressor.Dispose();
-			_suppressor = null;
 		}
 	}
 
@@ -296,31 +310,68 @@ public partial class MainWindow : Window
 
 	// События фида приходят из пула потоков — маршалит на Dispatcher
 	// (неблокирующе; discard — прецедент спайка S5.2).
-	private void OnNotificationAdded(object? sender, NotificationAddedEventArgs e)
+	private void OnNotificationAdded(object? sender, NotificationAddedEventArgs e) => ProcessNotification(e.Record);
+
+	// Общий путь живого события и «догоняющих» (S6.4): вердикт → карточка →
+	// сносы → floor. Живое зовёт из пула, догонялка — с Dispatcher.
+	private void ProcessNotification(NotificationRecord record)
 	{
 		// Вердикт — один раз, здесь: движок immutable, потокобезопасен.
-		RuleVerdict verdict = _rules?.Current.Decide(e.Record) ?? RuleVerdict.CatchAll;
-		// Имя/иконка отправителя — тоже здесь, в пуле (реестр/PackageManager);
+		RuleVerdict verdict = _rules?.Current.Decide(record) ?? RuleVerdict.CatchAll;
+		// Имя/иконка отправителя — тоже здесь (реестр/PackageManager);
 		// ImageSource заморожен резолвером — на Dispatcher только присваивание.
-		SenderResolver.SenderInfo senderInfo = SenderResolver.Resolve(e.Record.Aumid);
-		uint id = e.Record.Id;
-		string text = $"{Describe(e.Record)} ▸ {FormatVerdict(verdict)}";
+		SenderResolver.SenderInfo senderInfo = SenderResolver.Resolve(record.Aumid);
+		uint id = record.Id;
+		string text = $"{Describe(record)} ▸ {FormatVerdict(verdict)}";
 
 		// BeginInvoke ДО Remove: очередь Dispatcher FIFO, «+» всегда выше «−»;
 		// карточка show-вердикта открывается той же посылкой (стек — контракт
-		// Dispatcher-only, e.Record/verdict замкнуты, движок immutable).
+		// Dispatcher-only, record/verdict замкнуты, движок immutable).
 		_ = Dispatcher.BeginInvoke(() =>
 		{
 			AddRow($"+ id {id}", text);
 			if (verdict.Action == RuleAction.Show)
 			{
-				_stack?.Show(e.Record, verdict, senderInfo);
+				_stack?.Show(record, verdict, senderInfo);
 			}
 		});
-		// Новый отправитель — blanket ShowBanner=0 (Э1): из пула, супрессор под
-		// локом; не блокирует показ карточки (трейс придёт своей строкой).
-		_suppressor?.BlanketSender(e.Record.Aumid);
+		// Новый отправитель — blanket ShowBanner=0 (Э1): супрессор под локом;
+		// не блокирует показ карточки (трейс придёт своей строкой).
+		_suppressor?.BlanketSender(record.Aumid);
 		ApplyNativeRemoval(verdict, id);
+		_floor?.MarkSeen(record);
+	}
+
+	// S6.4 «догоняющие» (правило владельца: показать то, что не увидели).
+	// Не увидел = нет во floor И формула висела погашенной мёртвым интервалом
+	// (крах — RepairedFromCrash); чистый выход возвращал баннеры → юзер видел
+	// нативно → молча в floor.
+	private void CatchUpMissed(IReadOnlyList<NotificationRecord> backlog)
+	{
+		if (_floor is null)
+		{
+			return;
+		}
+
+		bool missedWhileDead = _suppressor?.RepairedFromCrash == true;
+		int caughtUp = 0;
+		foreach (NotificationRecord record in backlog)
+		{
+			if (!missedWhileDead || _floor.WasSeen(record))
+			{
+				_floor.MarkSeen(record);
+				continue;
+			}
+
+			caughtUp++;
+			AddRow("Догон", $"{Describe(record)} ▸ пропущено при мёртвой формуле");
+			ProcessNotification(record);
+		}
+
+		if (caughtUp > 0)
+		{
+			AddRow("Догон", $"{caughtUp} уведомл. показано повторно (крах прошлой сессии)");
+		}
 	}
 
 	// Трейс подавления: BlanketSender стреляет из пула (событие фида) — маршалит.

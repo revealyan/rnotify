@@ -40,6 +40,13 @@ public sealed class NativeBannerSuppressor : IDisposable
 	/// <summary>Строка трейса для панели диагностики.</summary>
 	public event EventHandler<SuppressionTraceEventArgs>? Trace;
 
+	/// <summary>
+	/// S6.4: прошлый старт чинил реестр по маркеру краха — значит, нативные
+	/// баннеры висели погашенными мёртвым интервалом (юзер не видел) —
+	/// потребитель показывает догоняющие карточки по floor.
+	/// </summary>
+	public bool RepairedFromCrash { get; private set; }
+
 	/// <summary>Маркер по умолчанию: %USERPROFILE%\.rnotify\suppression.json.</summary>
 	public static string DefaultMarkerPath { get; } = IOPath.Combine(
 		Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".rnotify", "suppression.json");
@@ -68,13 +75,8 @@ public sealed class NativeBannerSuppressor : IDisposable
 				return;
 			}
 
-			SuppressionSnapshot? stale = TryReadMarker();
-			if (stale is not null)
+			if (RepairMarkerCore())
 			{
-				// Неудача репейра хоронит единственный снапшот прошлой сессии —
-				// наружу, свежий Apply поверх поломанного состояния не пишем.
-				RestoreCore(stale);
-				TryDeleteMarker();
 				Trace?.Invoke(this, new SuppressionTraceEventArgs("Э1: маркер прошлой сессии — реестр отремонтирован перед применением"));
 			}
 
@@ -199,6 +201,42 @@ public sealed class NativeBannerSuppressor : IDisposable
 				_blanketed = [];
 			}
 		}
+	}
+
+	/// <summary>
+	/// S6.4: чинит реестр по маркеру БЕЗ применения формулы — consent-ветка
+	/// тоже обязана вернуть юзеру баннеры. Idempotent; неудача наружу
+	/// (хоронить снапшот молча нельзя). Вызывать до Apply.
+	/// </summary>
+	public bool TryRepairMarker()
+	{
+		lock (_gate)
+		{
+			if (!RepairMarkerCore())
+			{
+				return RepairedFromCrash;
+			}
+
+			RepairedFromCrash = true;
+			Trace?.Invoke(this, new SuppressionTraceEventArgs("Э1: маркер прошлой сессии — реестр отремонтирован (формула не применяется)"));
+			return true;
+		}
+	}
+
+	// Ядро ремонта под локом вызывающего: неудача репейра хоронит единственный
+	// снапшот прошлой сессии — потому исключение наружу, Apply не пишем поверх.
+	private bool RepairMarkerCore()
+	{
+		SuppressionSnapshot? stale = TryReadMarker();
+		if (stale is null)
+		{
+			return false;
+		}
+
+		RestoreCore(stale);
+		TryDeleteMarker();
+		RepairedFromCrash = true;
+		return true;
 	}
 
 	// Чистые записи возврата по снимку: глобальный — prior ?? 1 (§10a: удаление
