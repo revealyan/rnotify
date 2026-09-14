@@ -25,10 +25,14 @@
             <!-- Акцент-полоса группы правил (цвет AccentHex вердикта; без цвета — скрыта). -->
             <Border Grid.Column="0" x:Name="AccentStrip" Width="4" CornerRadius="2"
                     Margin="8,10,0,10" Visibility="Collapsed" />
-            <!-- Иконка-бейдж отправителя: плейсхолдер до резолва имени/иконки (остаток Э2). -->
+            <!-- Иконка отправителя (S6.3: реестр AppUserModelId/PackageManager);
+                 не отрезолвилась — плейсхолдер-колокол. -->
             <Border Grid.Column="1" Width="36" Height="36" CornerRadius="6"
                     Background="#33FFFFFF" Margin="14,0,0,0" VerticalAlignment="Center">
-                <TextBlock Text="🔔" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                <Grid>
+                    <Image x:Name="SenderIcon" Width="24" Height="24" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" />
+                    <TextBlock x:Name="SenderBadgeText" Text="🔔" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Grid>
             </Border>
             <StackPanel Grid.Column="2" Margin="12,12,8,12" VerticalAlignment="Center">
                 <TextBlock x:Name="SenderText" Foreground="#B8FFFFFF" FontSize="11" TextTrimming="CharacterEllipsis" />

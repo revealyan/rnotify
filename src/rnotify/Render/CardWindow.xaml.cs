@@ -33,14 +33,20 @@ public partial class CardWindow : Window
 	private DispatcherTimer? _ttlTimer;
 	private bool _closing;
 
-	internal CardWindow(NotificationRecord record, RuleVerdict verdict, Color? accent, int offsetDip)
+	internal CardWindow(NotificationRecord record, RuleVerdict verdict, Color? accent, SenderResolver.SenderInfo sender, int offsetDip)
 	{
 		InitializeComponent();
 		_record = record;
 		_verdict = verdict;
 		_offsetDip = offsetDip;
 
-		SenderText.Text = SenderFromAumid(record.Aumid);
+		SenderText.Text = sender.Name;
+		if (sender.Icon is { } icon)
+		{
+			SenderIcon.Source = icon;
+			SenderBadgeText.Visibility = Visibility.Collapsed;
+		}
+
 		TitleText.Text = record.Title;
 		BodyText.Text = record.Body;
 		if (accent is { } color)
@@ -51,29 +57,6 @@ public partial class CardWindow : Window
 
 		Loaded += OnLoaded;
 		PlaceAtToastZone();
-	}
-
-	/// <summary>
-	/// Отображаемое имя отправителя из AUMID: хвост после последнего разделителя
-	/// пути со срезом «.exe» (тосты нести полный путь вида
-	/// {SID}\...\powershell.exe — канон §10c). DisplayName листенер не даёт
-	/// (резолв имени/иконки — остаток Э2).
-	/// </summary>
-	internal static string SenderFromAumid(string? aumid)
-	{
-		if (string.IsNullOrWhiteSpace(aumid))
-		{
-			return "<без AUMID>";
-		}
-
-		int tail = Math.Max(aumid.LastIndexOf('\\'), aumid.LastIndexOf('/')) + 1;
-		string name = aumid[tail..];
-		if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-		{
-			name = name[..^4];
-		}
-
-		return name.Length > 0 ? name : aumid;
 	}
 
 	// Позиция: правый-нижний угол рабочей области основного монитора, отступ

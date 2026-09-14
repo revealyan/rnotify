@@ -16,7 +16,7 @@ internal static class VictimFocus
 	/// <summary>Пытается поднять окно отправителя; detail — результат для трейса.</summary>
 	internal static bool TryFocus(string? aumid, out string detail)
 	{
-		string name = CardWindow.SenderFromAumid(aumid);
+		string name = SenderResolver.NameFromAumid(aumid);
 		if (name.Length == 0 || name.StartsWith('<'))
 		{
 			detail = "нет AUMID — просто закрыть";

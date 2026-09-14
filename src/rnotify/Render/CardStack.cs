@@ -30,7 +30,7 @@ internal sealed class CardStack : IDisposable
 	private sealed record Entry(CardWindow Card, NotificationRecord Record, EventHandler FocusHandler);
 
 	/// <summary>Показать карточку по show-вердикту (свежая — снизу).</summary>
-	internal void Show(NotificationRecord record, RuleVerdict verdict)
+	internal void Show(NotificationRecord record, RuleVerdict verdict, SenderResolver.SenderInfo sender)
 	{
 		Color? accent = TryParseAccent(verdict.AccentHex, out string? accentError);
 		if (accentError is not null)
@@ -39,7 +39,7 @@ internal sealed class CardStack : IDisposable
 				$"цвет группы «{verdict.AccentHex}» не разобран: {accentError} — карточка без полосы"));
 		}
 
-		CardWindow card = new(record, verdict, accent, offsetDip: 0);
+		CardWindow card = new(record, verdict, accent, sender, offsetDip: 0);
 		EventHandler handler = (_, _) => OnFocusRequested(card);
 		Entry entry = new(card, record, handler);
 		card.FocusRequested += handler;

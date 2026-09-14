@@ -300,6 +300,9 @@ public partial class MainWindow : Window
 	{
 		// Вердикт — один раз, здесь: движок immutable, потокобезопасен.
 		RuleVerdict verdict = _rules?.Current.Decide(e.Record) ?? RuleVerdict.CatchAll;
+		// Имя/иконка отправителя — тоже здесь, в пуле (реестр/PackageManager);
+		// ImageSource заморожен резолвером — на Dispatcher только присваивание.
+		SenderResolver.SenderInfo senderInfo = SenderResolver.Resolve(e.Record.Aumid);
 		uint id = e.Record.Id;
 		string text = $"{Describe(e.Record)} ▸ {FormatVerdict(verdict)}";
 
@@ -311,7 +314,7 @@ public partial class MainWindow : Window
 			AddRow($"+ id {id}", text);
 			if (verdict.Action == RuleAction.Show)
 			{
-				_stack?.Show(e.Record, verdict);
+				_stack?.Show(e.Record, verdict, senderInfo);
 			}
 		});
 		// Новый отправитель — blanket ShowBanner=0 (Э1): из пула, супрессор под
