@@ -1,0 +1,22 @@
+<Window x:Class="rnotify.Render.CatchUpBanner"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:app="clr-namespace:rnotify"
+        Title="rnotify catch-up" Width="372" Height="34"
+        WindowStyle="None" ResizeMode="NoResize" ShowInTaskbar="False"
+        ShowActivated="False" Topmost="True"
+        AllowsTransparency="True" Background="Transparent"
+        WindowStartupLocation="Manual">
+    <!-- S6.4: «Пропустить всё» над стеком догоняющих (как в телеге): тонкая
+         неактивируемая плашка; фон/бордер карточки, кнопка — единственный акт. -->
+    <Border CornerRadius="8" Background="#F228282B" BorderBrush="#44FFFFFF"
+            BorderThickness="1" Margin="4" Padding="10,2">
+        <DockPanel>
+            <Button x:Name="SkipButton" DockPanel.Dock="Right" Click="OnSkipClick"
+                    Background="Transparent" BorderThickness="0" Foreground="#FFB39DFF"
+                    FontWeight="SemiBold" Cursor="Hand" VerticalAlignment="Center" />
+            <TextBlock x:Name="CountText" Foreground="#CCFFFFFF" FontSize="11"
+                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+        </DockPanel>
+    </Border>
+</Window>

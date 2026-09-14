@@ -26,11 +26,33 @@ internal sealed class CardStack : IDisposable
 	/// <summary>Жизнь стека для панели диагностики.</summary>
 	internal event EventHandler<CardTraceEventArgs>? Trace;
 
+	/// <summary>Слот освободился (любое закрытие) — догонялка докладывает следующую (S6.4).</summary>
+	internal event EventHandler? SlotFreed;
+
+	/// <summary>Сколько карточек на экране (Dispatcher-only).</summary>
+	internal int VisibleCount => _cards.Count;
+
+	/// <summary>Есть ли на экране догоняющие (плашка «скипнуть всё» живёт, пока есть — S6.4).</summary>
+	internal bool HasCatchUp => _cards.Exists(e => e.IsCatchUp);
+
+	/// <summary>Закрыть все догоняющие карточки (скип: очередь уже слита, гасим и прочитанное-непрочитанное на экране).</summary>
+	internal void CloseCatchUp()
+	{
+		foreach (Entry entry in _cards.Where(e => e.IsCatchUp).ToArray())
+		{
+			Detach(entry);
+			entry.Card.Dismiss();
+		}
+
+		_cards.RemoveAll(e => e.IsCatchUp);
+		Relayout();
+	}
+
 	// FocusHandler хранится в записи: замыкание на карточку нужно и для отписки.
-	private sealed record Entry(CardWindow Card, NotificationRecord Record, EventHandler FocusHandler);
+	private sealed record Entry(CardWindow Card, NotificationRecord Record, EventHandler FocusHandler, bool IsCatchUp = false);
 
 	/// <summary>Показать карточку по show-вердикту (свежая — снизу).</summary>
-	internal void Show(NotificationRecord record, RuleVerdict verdict, SenderResolver.SenderInfo sender)
+	internal void Show(NotificationRecord record, RuleVerdict verdict, SenderResolver.SenderInfo sender, bool isCatchUp = false)
 	{
 		Color? accent = TryParseAccent(verdict.AccentHex, out string? accentError);
 		if (accentError is not null)
@@ -41,7 +63,7 @@ internal sealed class CardStack : IDisposable
 
 		CardWindow card = new(record, verdict, accent, sender, offsetDip: 0);
 		EventHandler handler = (_, _) => OnFocusRequested(card);
-		Entry entry = new(card, record, handler);
+		Entry entry = new(card, record, handler, isCatchUp);
 		card.FocusRequested += handler;
 		card.Closed += OnCardClosed;
 		_cards.Add(entry);
@@ -94,6 +116,7 @@ internal sealed class CardStack : IDisposable
 		Detach(_cards[index]);
 		_cards.RemoveAt(index);
 		Relayout();
+		SlotFreed?.Invoke(this, EventArgs.Empty);
 	}
 
 	private void OnFocusRequested(CardWindow card)

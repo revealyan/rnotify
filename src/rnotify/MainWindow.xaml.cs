@@ -4,6 +4,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Windows.ApplicationModel;
 using rnotify.Core;
 using rnotify.Core.Listener;
@@ -43,6 +44,9 @@ public partial class MainWindow : Window
 	private NativeBannerSuppressor? _suppressor;
 	private TrayIcon? _tray;
 	private NotificationFloor? _floor;
+	private readonly Queue<NotificationRecord> _catchUpQueue = [];
+	private System.Windows.Threading.DispatcherTimer? _catchUpPacer;
+	private CatchUpBanner? _catchUpBanner;
 	private AppSettingsStore? _settingsStore;
 	private AppSettings _settings = new();
 	// S6.1: закрытие окна = свернуть в трей; настоящий выход (меню трея
@@ -189,6 +193,7 @@ public partial class MainWindow : Window
 			};
 			_tray.ExitRequested += OnTrayExit;
 			_tray.AutostartToggled += OnTrayAutostart;
+			_tray.SkipCatchUpRequested += OnTraySkipCatchUp;
 			_tray.AutostartChecked = _settings.Autostart;
 			_tray.Show();
 			AddRow(Strings.RowTray, "иконка в области уведомлений (закрытие окна = свернуть сюда)");
@@ -270,7 +275,16 @@ public partial class MainWindow : Window
 		Justification = "Граница выхода: неудача возврата формулы Э1 не должна ронять закрытие — маркер остаётся, следующий старт чинит")]
 	protected override void OnClosed(EventArgs e)
 	{
-		// Трей — первым: иконка исчезает раньше всего живого.
+		// Догоняющий поток — прежде всего живого.
+		_catchUpPacer?.Stop();
+		if (_stack is not null)
+		{
+			_stack.SlotFreed -= OnCatchUpSlotFreed;
+		}
+
+		_catchUpBanner?.Close();
+
+		// Трей — следующим: иконка исчезает раньше всего живого.
 		_tray?.Dispose();
 
 		// Стек — следующим (карточки и вотчер стола), затем монитор и отписка:
@@ -314,10 +328,14 @@ public partial class MainWindow : Window
 
 	// Общий путь живого события и «догоняющих» (S6.4): вердикт → карточка →
 	// сносы → floor. Живое зовёт из пула, догонялка — с Dispatcher.
-	private void ProcessNotification(NotificationRecord record)
+	private void ProcessNotification(NotificationRecord record, bool forceSticky = false, bool isCatchUp = false)
 	{
 		// Вердикт — один раз, здесь: движок immutable, потокобезопасен.
 		RuleVerdict verdict = _rules?.Current.Decide(record) ?? RuleVerdict.CatchAll;
+		if (forceSticky)
+		{
+			verdict = verdict with { Ttl = null }; // догоняющая ждёт читателя (S6.4)
+		}
 		// Имя/иконка отправителя — тоже здесь (реестр/PackageManager);
 		// ImageSource заморожен резолвером — на Dispatcher только присваивание.
 		SenderResolver.SenderInfo senderInfo = SenderResolver.Resolve(record.Aumid);
@@ -332,7 +350,7 @@ public partial class MainWindow : Window
 			AddRow($"+ id {id}", text);
 			if (verdict.Action == RuleAction.Show)
 			{
-				_stack?.Show(record, verdict, senderInfo);
+				_stack?.Show(record, verdict, senderInfo, isCatchUp);
 			}
 		});
 		// Новый отправитель — blanket ShowBanner=0 (Э1): супрессор под локом;
@@ -345,33 +363,198 @@ public partial class MainWindow : Window
 	// S6.4 «догоняющие» (правило владельца: показать то, что не увидели).
 	// Не увидел = нет во floor И формула висела погашенной мёртвым интервалом
 	// (крах — RepairedFromCrash); чистый выход возвращал баннеры → юзер видел
-	// нативно → молча в floor.
+	// нативно → молча в floor. Поток — пачками: очередь + pacing-таймер (карточка
+	// раз в 1.5 с, стек-3 сам справляется), лимит settings.json catchUpLimit
+	// (0 — не догонять), «Пропустить догоняющие» в меню трея сливает очередь.
 	private void CatchUpMissed(IReadOnlyList<NotificationRecord> backlog)
 	{
-		if (_floor is null)
+		if (_floor is null || _settings.CatchUpLimit <= 0)
 		{
+			foreach (NotificationRecord record in backlog)
+			{
+				_floor?.MarkSeen(record);
+			}
+
 			return;
 		}
 
 		bool missedWhileDead = _suppressor?.RepairedFromCrash == true;
-		int caughtUp = 0;
+		List<NotificationRecord> missed = [];
 		foreach (NotificationRecord record in backlog)
 		{
-			if (!missedWhileDead || _floor.WasSeen(record))
+			if (missedWhileDead && !_floor.WasSeen(record))
 			{
-				_floor.MarkSeen(record);
-				continue;
+				missed.Add(record);
+			}
+			else
+			{
+				_floor.MarkSeen(record); // видел (floor) или нативно (чистый выход)
+			}
+		}
+
+		if (missed.Count == 0)
+		{
+			return;
+		}
+
+		// Свежайшие вперёд (самое релевантное), хвост за лимитом — молча.
+		missed.Sort((a, b) => b.RaisedAt.CompareTo(a.RaisedAt));
+		int skipped = Math.Max(0, missed.Count - _settings.CatchUpLimit);
+		foreach (NotificationRecord record in missed.Take(_settings.CatchUpLimit))
+		{
+			_catchUpQueue.Enqueue(record);
+		}
+
+		AddRow("Догон", $"очередь {_catchUpQueue.Count} пропущенных (лимит {_settings.CatchUpLimit}), "
+			+ (_settings.CatchUpSticky ? "липкие — закрываешь ты, подача по слотам" : "поток пачками по 1.5с")
+			+ "; скип — плашка над стеком или меню трея"
+			+ (skipped > 0 ? $", за лимитом молча: {skipped}" : string.Empty));
+		_catchUpBanner = new CatchUpBanner(_catchUpQueue.Count);
+		_catchUpBanner.SkipRequested += OnTraySkipCatchUp; // тот же обработчик: слить в floor
+		_catchUpBanner.Show();
+		if (_stack is not null)
+		{
+			_stack.SlotFreed += OnCatchUpSlotFreed;
+		}
+
+		PumpCatchUp();
+	}
+
+	// Слот освободился (юзер закрыл карточку) — докладываем следующую догоняющую;
+	// финал = очередь пуста И экранная догоняющая закрыта последней.
+	private void OnCatchUpSlotFreed(object? sender, EventArgs e)
+	{
+		if (_catchUpQueue.Count > 0)
+		{
+			PumpCatchUp();
+			return;
+		}
+
+		if (_stack is not null && _catchUpBanner is not null)
+		{
+			_catchUpBanner.MoveAbove(_stack.VisibleCount);
+			if (!_stack.HasCatchUp)
+			{
+				FinishCatchUp();
+			}
+		}
+	}
+
+	// Конец потока: отписки и плашка вниз (с ANY пути — подача, таймер, слоты).
+	private void FinishCatchUp()
+	{
+		if (_stack is not null)
+		{
+			_stack.SlotFreed -= OnCatchUpSlotFreed;
+		}
+
+		CloseCatchUpBanner();
+	}
+
+	// Подача по свободным слотам стека (липкий режим — читает юзер) или
+	// по одной за тик 1.5с (не липкий: TTL вердикта сам двигает поток).
+	private void PumpCatchUp()
+	{
+		if (_catchUpQueue.Count == 0)
+		{
+			FinishCatchUp();
+			return;
+		}
+
+		// Липкий режим: заполняем стек сразу (показал 3 — закрываешь ты),
+		// дальше подача по SlotFreed. ГОНКА: карточка ставится через
+		// BeginInvoke — VisibleCount ещё старый, потому считаем показанное
+		// локально; финиш здесь НЕ решаем (его закрытия/скип решат).
+		if (_settings.CatchUpSticky)
+		{
+			int shown = 0;
+			while (_catchUpQueue.Count > 0 && _stack is not null && _stack.VisibleCount + shown < CardStack.MaxCards)
+			{
+				NotificationRecord record = _catchUpQueue.Dequeue();
+				AddRow("Догон", $"{Describe(record)} ▸ пропущено при мёртвой формуле");
+				_catchUpBanner?.Update(_catchUpQueue.Count);
+				ProcessNotification(record, forceSticky: true, isCatchUp: true);
+				shown++;
 			}
 
-			caughtUp++;
-			AddRow("Догон", $"{Describe(record)} ▸ пропущено при мёртвой формуле");
-			ProcessNotification(record);
+			_catchUpBanner?.MoveAbove(Math.Min(CardStack.MaxCards, (_stack?.VisibleCount ?? 0) + shown));
+			return;
 		}
 
-		if (caughtUp > 0)
+		NotificationRecord paced = _catchUpQueue.Dequeue();
+		AddRow("Догон", $"{Describe(paced)} ▸ пропущено при мёртвой формуле");
+		_catchUpBanner?.Update(_catchUpQueue.Count);
+		ProcessNotification(paced);
+		if (_catchUpQueue.Count == 0)
 		{
-			AddRow("Догон", $"{caughtUp} уведомл. показано повторно (крах прошлой сессии)");
+			_catchUpPacer?.Stop();
+			FinishCatchUp(); // очередь иссякла; TTL-карточки сами уйдут, скипать нечего
 		}
+
+		if (!_settings.CatchUpSticky)
+		{
+			_catchUpPacer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
+			if (_catchUpQueue.Count > 0 && !_catchUpPacer.IsEnabled)
+			{
+				_catchUpPacer.Tick -= PumpTimerTick; // страховка от двойной подписки
+				_catchUpPacer.Tick += PumpTimerTick;
+				_catchUpPacer.Start();
+			}
+		}
+	}
+
+	// Таймерный путь (не липкий): одна за тик.
+	private void PumpTimerTick(object? sender, EventArgs e)
+	{
+		if (_catchUpQueue.Count == 0)
+		{
+			_catchUpPacer?.Stop();
+			FinishCatchUp();
+			return;
+		}
+
+		NotificationRecord record = _catchUpQueue.Dequeue();
+		AddRow("Догон", $"{Describe(record)} ▸ пропущено при мёртвой формуле");
+		_catchUpBanner?.Update(_catchUpQueue.Count);
+		ProcessNotification(record);
+		if (_catchUpQueue.Count == 0)
+		{
+			_catchUpPacer?.Stop();
+			FinishCatchUp();
+		}
+	}
+
+	private void CloseCatchUpBanner()
+	{
+		if (_catchUpBanner is null)
+		{
+			return;
+		}
+
+		_catchUpBanner.SkipRequested -= OnTraySkipCatchUp;
+		_catchUpBanner.Close();
+		_catchUpBanner = null;
+	}
+
+	// Меню трея «Пропустить догоняющие»: остаток очереди — молча в floor.
+	private void OnTraySkipCatchUp(object? sender, EventArgs e)
+	{
+		// Скип meaningful и при пустой очереди: липкие догоняющие ещё на экране.
+		if (_floor is null || _stack is null || (_catchUpQueue.Count == 0 && !_stack.HasCatchUp))
+		{
+			return;
+		}
+
+		int dropped = _catchUpQueue.Count;
+		while (_catchUpQueue.Count > 0)
+		{
+			_floor.MarkSeen(_catchUpQueue.Dequeue());
+		}
+
+		_catchUpPacer?.Stop();
+		_stack?.CloseCatchUp();
+		FinishCatchUp();
+		AddRow("Догон", $"скипнуто {dropped} + экран — в Центре (Win+N)");
 	}
 
 	// Трейс подавления: BlanketSender стреляет из пула (событие фида) — маршалит.
