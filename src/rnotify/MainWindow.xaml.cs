@@ -5,16 +5,21 @@ using Windows.ApplicationModel;
 using rnotify.Core;
 using rnotify.Core.Listener;
 using rnotify.Core.Rules;
+using rnotify.Core.Settings;
+using rnotify.Core.Suppression;
 using rnotify.Render;
 
 namespace rnotify;
 
 /// <summary>
 /// Живая проверка MSIX-identity (S5.1), поток уведомлений листенера (Э2),
-/// вердикты правил (Э3) и рендер карточек (Э4): окно показывает
-/// Package.Current.Id, события фида — с вердиктом; show-вердикт открывает
-/// карточку стека, delete/killNative сносят нативную копию из Центра живьём,
-/// чужой Removed гасит карточку. Запуск вне пакета (F5) — так и пишет.
+/// вердикты правил (Э3), рендер карточек (Э4) и подавление нативных баннеров
+/// формулой Э1 (S1.2): окно показывает Package.Current.Id, события фида —
+/// с вердиктом; show-вердикт открывает карточку стека, delete/killNative
+/// сносят нативную копию из Центра живьём, чужой Removed гасит карточку;
+/// после consent фида применяется формула Э1 (глобальный тумблер + blanket
+/// ShowBanner=0), на выходе — возврат прежних значений. Запуск вне пакета
+/// (F5) — так и пишет.
 /// </summary>
 [SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable",
 	Justification = "Жизненный цикл _feed/_stack/_rulesMonitor — окно: Dispose в OnClosed (см. прецедент App с мьютексом)")]
@@ -29,6 +34,7 @@ public partial class MainWindow : Window
 	private RulesReloader? _rules;
 	private RulesMonitor? _rulesMonitor;
 	private CardStack? _stack;
+	private NativeBannerSuppressor? _suppressor;
 	// Анти-самоснос (канон §10c): killNative = показать свою карточку И снести
 	// нативную копию — собственный Removed-дифф не должен гасить эту карточку.
 	private readonly Lock _selfRemovedGate = new();
@@ -68,10 +74,49 @@ public partial class MainWindow : Window
 			ListenerStartResult start = await _feed.StartAsync().ConfigureAwait(true);
 			AddRow("Consent (Э2)", start.Status.ToString());
 			AddRow("Baseline", $"{start.BaselineCount} уведомл. пропущено (backlog)");
+
+			StartSuppression(start.Status);
 		}
 		catch (Exception ex)
 		{
 			AddRow("Листенер", $"ошибка запуска: {ex.Message}");
+		}
+	}
+
+	// Э1 (S1.2): формула подавления — после consent-решения фида. Allowed →
+	// гасим; иначе — по настройке suppressWithoutListener (settings.json, дефолт
+	// false — безопасно: без листенера карточек нет, молчаливое гашение оставило
+	// бы пользователя вовсе без уведомлений). Первый Added нового отправителя
+	// добивает blanket (OnNotificationAdded → BlanketSender). Не применена —
+	// приложение живёт на нативных баннерах, строка в панель.
+	[SuppressMessage("Design", "CA1031:Do not catch general exception types",
+		Justification = "Граница UI: сбой применения формулы показываем строкой и живём на нативных баннерах")]
+	private void StartSuppression(NotificationAccessStatus consent)
+	{
+		AppSettingsStore settingsStore = new();
+		AppSettingsLoadResult settings = settingsStore.LoadOrDefault();
+		AddRow("Настройки", settings.Error is { } error
+			? $"ошибка: {error.Message} — дефолт suppressWithoutListener={settings.Settings.SuppressWithoutListener}"
+			: $"{settingsStore.FilePath}: suppressWithoutListener={settings.Settings.SuppressWithoutListener}");
+
+		if (consent != NotificationAccessStatus.Allowed && !settings.Settings.SuppressWithoutListener)
+		{
+			AddRow("Э1", $"consent {consent} — нативные баннеры не гасим");
+			return;
+		}
+
+		_suppressor = new NativeBannerSuppressor(new RegistryNotificationSettings());
+		_suppressor.Trace += OnSuppressionTrace;
+		try
+		{
+			_suppressor.Apply();
+		}
+		catch (Exception ex)
+		{
+			AddRow("Э1", $"не применена: {ex.Message} — нативные баннеры остаются");
+			_suppressor.Trace -= OnSuppressionTrace;
+			_suppressor.Dispose();
+			_suppressor = null;
 		}
 	}
 
@@ -93,6 +138,8 @@ public partial class MainWindow : Window
 		_rulesMonitor = new RulesMonitor(store, _rules);
 	}
 
+	[SuppressMessage("Design", "CA1031:Do not catch general exception types",
+		Justification = "Граница выхода: неудача возврата формулы Э1 не должна ронять закрытие — маркер остаётся, следующий старт чинит")]
 	protected override void OnClosed(EventArgs e)
 	{
 		// Стек — первым (карточки и вотчер стола), затем монитор и отписка:
@@ -106,6 +153,24 @@ public partial class MainWindow : Window
 		}
 
 		_feed?.Dispose();
+
+		// Э1 — последней: нативные баннеры возвращаются, когда фид уже молчит.
+		// Dispose после Restore — страховочная сетка (no-op при успехе).
+		if (_suppressor is not null)
+		{
+			_suppressor.Trace -= OnSuppressionTrace;
+			try
+			{
+				_suppressor.Restore();
+			}
+			catch (Exception ex)
+			{
+				AddRow("Э1", $"возврат не удался: {ex.Message} — маркер оставлен, следующий старт починит");
+			}
+
+			_suppressor.Dispose();
+		}
+
 		base.OnClosed(e);
 	}
 
@@ -129,7 +194,16 @@ public partial class MainWindow : Window
 				_stack?.Show(e.Record, verdict);
 			}
 		});
+		// Новый отправитель — blanket ShowBanner=0 (Э1): из пула, супрессор под
+		// локом; не блокирует показ карточки (трейс придёт своей строкой).
+		_suppressor?.BlanketSender(e.Record.Aumid);
 		ApplyNativeRemoval(verdict, id);
+	}
+
+	// Трейс подавления: BlanketSender стреляет из пула (событие фида) — маршалит.
+	private void OnSuppressionTrace(object? sender, SuppressionTraceEventArgs e)
+	{
+		_ = Dispatcher.BeginInvoke(() => AddRow("Э1", e.Message));
 	}
 
 	private void OnNotificationRemoved(object? sender, NotificationRemovedEventArgs e)
