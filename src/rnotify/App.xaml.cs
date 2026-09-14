@@ -44,11 +44,22 @@ public partial class App : Application
 		_showPanelSignal = new EventWaitHandle(false, EventResetMode.AutoReset, ProductIdentity.ShowPanelEventName);
 		base.OnStartup(e);
 
-		// StartupUri убран: окно создаём руками — автозапуск стартует скрытым
-		// (детект активации StartupTask — коммит 2, пока старт всегда видимый).
+		// StartupUri убран: окно создаём руками. Активация StartupTask (запуск
+		// системы) — старт сразу в трей (решение план-гейта S6.1): Show+Hide в
+		// одном кадре — Loaded стреляет (инициализация живёт в OnLoaded), а
+		// рендера между вызовами не было, окна не видно.
+		bool startupActivation = IsStartupActivation();
 		MainWindow window = new();
 		MainWindow = window;
-		window.Show();
+		if (startupActivation)
+		{
+			window.Show();
+			window.Hide();
+		}
+		else
+		{
+			window.Show();
+		}
 
 		// Ждём сигнал «покажи панель» фоновым потоком: второй запуск — самый
 		// естественный путь к панели свёрнутого демона. IsBackground: выход
@@ -67,6 +78,23 @@ public partial class App : Application
 				MainWindow?.Show();
 				MainWindow?.Activate();
 			});
+		}
+	}
+
+	// Активация StartupTask (запуск системы) — AppLifecycle от WinSDK-проекций.
+	// WASDK 2.4: GetActivatedEventArgs — instance-член текущего AppInstance.
+	[SuppressMessage("Design", "CA1031:Do not catch general exception types",
+		Justification = "unpackaged/нестандартная активация: не определять StartupTask — показать окно как при ручном запуске")]
+	private static bool IsStartupActivation()
+	{
+		try
+		{
+			return Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs().Kind
+				== Microsoft.Windows.AppLifecycle.ExtendedActivationKind.StartupTask;
+		}
+		catch (Exception)
+		{
+			return false;
 		}
 	}
 

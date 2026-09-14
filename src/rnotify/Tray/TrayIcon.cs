@@ -1,6 +1,5 @@
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
-using IOPath = System.IO.Path;
 
 namespace rnotify.Tray;
 
@@ -51,9 +50,7 @@ internal sealed class TrayIcon : IDisposable
 			return;
 		}
 
-		string iconPath = IOPath.Combine(AppContext.BaseDirectory, "Assets", "rnotify.ico");
-		_icon = LoadImage(IntPtr.Zero, iconPath, _imageIcon, 0, 0, _lrLoadFromFile);
-
+		_icon = LoadIconResource();
 		NOTIFYICONDATAW data = InitData();
 		data.hWnd = _source.Handle;
 		data.uFlags = _nifMessage | _nifIcon | _nifTip;
@@ -81,11 +78,23 @@ internal sealed class TrayIcon : IDisposable
 		HwndSource source = new(parameters);
 		TrayIcon tray = new() { _source = source };
 		source.AddHook(tray.WndProc);
+		// HwndSource создаёт окно ВИДИМЫМ (0×0 за экраном): Get-Process считает его
+		// «главным окном» процесса и оно торчит в z-порядке/alt-tab — гасим явно.
+		_ = ShowWindow(source.Handle, _swHide);
 		return tray;
 	}
 
 	private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
 	{
+		// taskkill и подобное шлют WM_CLOSE всем top-level окнам процесса: окно
+		// трея закрываться не имеет права (HwndSource по умолчанию уничтожится,
+		// иконка осиротеет) — глотаем, демон управляется только через меню.
+		if (msg == _wmClose)
+		{
+			handled = true;
+			return IntPtr.Zero;
+		}
+
 		if (msg == _callbackMessage)
 		{
 			// lParam — мышиное сообщение; клики по нетактивируемой зоне трея.
@@ -182,6 +191,61 @@ internal sealed class TrayIcon : IDisposable
 
 	private static NOTIFYICONDATAW InitData() => new() { cbSize = (uint)Marshal.SizeOf<NOTIFYICONDATAW>(), uID = _idTray };
 
+	// HICON из встроенного .ico (pack URI): LoadImage по файлу в WindowsApps
+	// ловит ERROR_FILE_NOT_FOUND (грабля S6.1). Формат RT_ICON = кадр
+	// BITMAPINFOHEADER+пиксели+маска — разбираем ICONDIR сами, кадр берём
+	// ближайший к маленькой метрике иконок (трей ~SM_CXSMICON).
+	private static IntPtr LoadIconResource()
+	{
+		using System.IO.Stream? stream = System.Windows.Application.GetResourceStream(
+			new Uri("pack://application:,,,/Assets/rnotify.ico"))?.Stream;
+		if (stream is null)
+		{
+			throw new InvalidOperationException("ресурс Assets/rnotify.ico не найден в сборке");
+		}
+
+		using System.IO.BinaryReader reader = new(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+		_ = reader.ReadUInt16(); // reserved
+		_ = reader.ReadUInt16(); // type: 1 = icon
+		ushort count = reader.ReadUInt16();
+		if (count == 0)
+		{
+			throw new InvalidOperationException("ico без кадров");
+		}
+
+		int desired = GetSystemMetrics(_smCxsmIcon);
+		int bestOffset = 0;
+		int bestSize = 0;
+		int bestDelta = int.MaxValue;
+		for (int i = 0; i < count; i++)
+		{
+			int width = reader.ReadByte();
+			_ = reader.ReadByte();   // height
+			_ = reader.ReadByte();   // colors
+			_ = reader.ReadByte();   // reserved
+			_ = reader.ReadUInt16(); // planes
+			_ = reader.ReadUInt16(); // bit count
+			int bytes = reader.ReadInt32();
+			int offset = reader.ReadInt32();
+			int size = width == 0 ? 256 : width;
+			int delta = Math.Abs(size - desired);
+			if (delta < bestDelta)
+			{
+				bestDelta = delta;
+				bestOffset = offset;
+				bestSize = bytes;
+			}
+		}
+
+		stream.Position = bestOffset;
+		byte[] frame = new byte[bestSize];
+		stream.ReadExactly(frame);
+		IntPtr icon = CreateIconFromResourceEx(frame, (uint)frame.Length, fIcon: true, 0x00030000, 0, 0, _lrDefaultColor);
+		return icon == IntPtr.Zero
+			? throw new InvalidOperationException($"CreateIconFromResourceEx не дал HICON (err {Marshal.GetLastWin32Error()})")
+			: icon;
+	}
+
 	// --- Win32 ---
 
 	private const uint _nimAdd = 0x0;
@@ -190,6 +254,7 @@ internal sealed class TrayIcon : IDisposable
 	private const uint _nifIcon = 0x2;
 	private const uint _nifTip = 0x4;
 	private const uint _wmNull = 0x0;
+	private const uint _wmClose = 0x0010;
 	private const uint _wmLbuttonUp = 0x0202;
 	private const uint _wmLbuttonDblclk = 0x0203;
 	private const uint _wmRbuttonUp = 0x0205;
@@ -198,19 +263,27 @@ internal sealed class TrayIcon : IDisposable
 	private const uint _mfChecked = 0x8;
 	private const uint _tpmRightButton = 0x2;
 	private const uint _tpmReturnCmd = 0x100;
-	private const uint _imageIcon = 1;
-	private const uint _lrLoadFromFile = 0x10;
+	private const int _swHide = 0x0;
+	private const int _smCxsmIcon = 49;
+	private const uint _lrDefaultColor = 0x0;
 
 	[DllImport("shell32.dll", SetLastError = true)]
 	[return: MarshalAs(UnmanagedType.Bool)]
 	private static extern bool Shell_NotifyIconW(uint dwMessage, ref NOTIFYICONDATAW lpData);
 
 	[DllImport("user32.dll", SetLastError = true)]
-	private static extern IntPtr LoadImage(IntPtr hInstance, [MarshalAs(UnmanagedType.LPWStr)] string name, uint type, int cx, int cy, uint load);
+	private static extern IntPtr CreateIconFromResourceEx(byte[] bits, uint size, [MarshalAs(UnmanagedType.Bool)] bool fIcon, uint version, int cx, int cy, uint flags);
+
+	[DllImport("user32.dll", SetLastError = true)]
+	private static extern int GetSystemMetrics(int index);
 
 	[DllImport("user32.dll", SetLastError = true)]
 	[return: MarshalAs(UnmanagedType.Bool)]
 	private static extern bool DestroyIcon(IntPtr hIcon);
+
+	[DllImport("user32.dll", SetLastError = true)]
+	[return: MarshalAs(UnmanagedType.Bool)]
+	private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
 	[DllImport("user32.dll", SetLastError = true)]
 	private static extern IntPtr SetForegroundWindow(IntPtr hWnd);

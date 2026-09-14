@@ -38,6 +38,19 @@ public sealed class AppSettingsStore
 	/// <summary>Путь к файлу настроек.</summary>
 	public string FilePath { get; }
 
+	/// <summary>Сохраняет настройки атомарно (tmp + Move) — чекбокс трея «Автозапуск».</summary>
+	public void Save(AppSettings settings)
+	{
+		Directory.CreateDirectory(IOPath.GetDirectoryName(FilePath) ?? ".");
+		string tmp = FilePath + ".tmp";
+		using (FileStream stream = File.Create(tmp))
+		{
+			JsonSerializer.Serialize(stream, settings, _jsonOptions);
+		}
+
+		File.Move(tmp, FilePath, overwrite: true);
+	}
+
 	/// <summary>Читает настройки; файла нет — атомарно создаёт дефолтный и отдаёт его.</summary>
 	public AppSettingsLoadResult LoadOrDefault()
 	{

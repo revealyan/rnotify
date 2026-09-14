@@ -11,6 +11,7 @@ using rnotify.Core.Settings;
 using rnotify.Core.Suppression;
 using rnotify.Render;
 using rnotify.Tray;
+using StartupTaskState = Windows.ApplicationModel.StartupTaskState;
 
 namespace rnotify;
 
@@ -40,6 +41,8 @@ public partial class MainWindow : Window
 	private CardStack? _stack;
 	private NativeBannerSuppressor? _suppressor;
 	private TrayIcon? _tray;
+	private AppSettingsStore? _settingsStore;
+	private AppSettings _settings = new();
 	// S6.1: закрытие окна = свернуть в трей; настоящий выход (меню трея
 	// «Выход») ставит флаг и доезжает до разборки OnClosed.
 	private bool _exiting;
@@ -56,18 +59,18 @@ public partial class MainWindow : Window
 		TrySetWindowIcon();
 	}
 
-	// Иконка окна — тем же Assets/rnotify.ico, что и трей; отсутствие файла
-	// (странная сборка) не должно ронять окно.
+	// Иконка окна — тем же встроенным Assets/rnotify.ico, что и трей (pack URI:
+	// файл в WindowsApps для LoadImage-пути недоступен, грабля S6.1); сбой
+	// ресурса не должен ронять окно.
 	private void TrySetWindowIcon()
 	{
 		try
 		{
-			string iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "rnotify.ico");
-			Icon = new BitmapImage(new Uri(iconPath, UriKind.Absolute));
+			Icon = new BitmapImage(new Uri("pack://application:,,,/Assets/rnotify.ico"));
 		}
 		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or UriFormatException)
 		{
-			// Окно без иконки живо; трей скажет своей ошибкой, если файла нет совсем.
+			// Окно без иконки живо; трей скажет своей ошибкой, если ресурса нет совсем.
 		}
 	}
 
@@ -77,6 +80,7 @@ public partial class MainWindow : Window
 	private async void OnLoaded(object sender, RoutedEventArgs e)
 	{
 		ShowIdentity();
+		LoadSettings();
 		StartTray();
 		try
 		{
@@ -118,13 +122,7 @@ public partial class MainWindow : Window
 		Justification = "Граница UI: сбой применения формулы показываем строкой и живём на нативных баннерах")]
 	private void StartSuppression(NotificationAccessStatus consent)
 	{
-		AppSettingsStore settingsStore = new();
-		AppSettingsLoadResult settings = settingsStore.LoadOrDefault();
-		AddRow("Настройки", settings.Error is { } error
-			? $"ошибка: {error.Message} — дефолт suppressWithoutListener={settings.Settings.SuppressWithoutListener}"
-			: $"{settingsStore.FilePath}: suppressWithoutListener={settings.Settings.SuppressWithoutListener}");
-
-		if (consent != NotificationAccessStatus.Allowed && !settings.Settings.SuppressWithoutListener)
+		if (consent != NotificationAccessStatus.Allowed && !_settings.SuppressWithoutListener)
 		{
 			AddRow("Э1", $"consent {consent} — нативные баннеры не гасим");
 			return;
@@ -145,6 +143,18 @@ public partial class MainWindow : Window
 		}
 	}
 
+	// Настройки — раньше трея: чекбокс «Автозапуск» берётся из settings.json
+	// (зеркало чекбокса; системная истина — StartupTask, показывается строкой
+	// при переключении).
+	private void LoadSettings()
+	{
+		_settingsStore = new AppSettingsStore();
+		AppSettingsLoadResult load = _settingsStore.LoadOrDefault();
+		_settings = load.Settings;
+		string values = $"suppressWithoutListener={_settings.SuppressWithoutListener}, autostart={_settings.Autostart}";
+		AddRow("Настройки", load.Error is { } error ? $"ошибка: {error.Message} — дефолт {values}" : $"{_settingsStore.FilePath}: {values}");
+	}
+
 	// Трей — до всего живого: «Выход» обязан работать даже если фид/правила
 	// упали на старте (демон без панели всё равно управляем).
 	[SuppressMessage("Design", "CA1031:Do not catch general exception types",
@@ -160,11 +170,40 @@ public partial class MainWindow : Window
 				Activate();
 			};
 			_tray.ExitRequested += OnTrayExit;
+			_tray.AutostartToggled += OnTrayAutostart;
+			_tray.AutostartChecked = _settings.Autostart;
 			_tray.Show();
+			AddRow("Трей", "иконка в области уведомлений (закрытие окна = свернуть сюда)");
 		}
 		catch (Exception ex)
 		{
 			AddRow("Трей", $"не встал: {ex.Message} — выход по закрытию окна невозможен, процесс жив");
+		}
+	}
+
+	// Чекбокс «Автозапуск»: WinRT StartupTask + зеркало в settings.json;
+	// итог — состояние системы (юзер/политика могли не дать включить).
+	[SuppressMessage("Design", "CA1031:Do not catch general exception types",
+		Justification = "Граница UI: сбой StartupTask (unpackaged F5, политика) — строка в панель, демону всё равно")]
+	private async void OnTrayAutostart(object? sender, EventArgs e)
+	{
+		bool desired = !_settings.Autostart;
+		try
+		{
+			StartupTaskState state = await AutostartManager.SetAsync(desired).ConfigureAwait(true);
+			bool enabled = state == StartupTaskState.Enabled;
+			_settings = _settings with { Autostart = enabled };
+			_settingsStore?.Save(_settings);
+			if (_tray is not null)
+			{
+				_tray.AutostartChecked = enabled;
+			}
+
+			AddRow("Автозапуск", enabled ? $"включён (state: {state})" : $"не включился (state: {state})");
+		}
+		catch (Exception ex)
+		{
+			AddRow("Автозапуск", $"не переключился: {ex.Message}");
 		}
 	}
 
