@@ -7,7 +7,10 @@ namespace rnotify.Core.Settings;
 /// баннеры оставили бы пользователя совсем без уведомлений. Поле autostart —
 /// зеркалит состояние чекбокса трея (S6.1): перезапуск с системой через
 /// MSIX StartupTask; приложение держит файл и WinRT-состояние синхронно.
+/// Поле language (S6.2) — override языка UI: "ru" | "en" | null (= язык ОС;
+/// нейтральный en, ru — сателлит). Читается на старте: смена — перезапуском.
 /// </summary>
 /// <param name="SuppressWithoutListener">Применять формулу Э1 при отказе/таймауте consent листенера.</param>
 /// <param name="Autostart">Запускаться с системой (StartupTask; чекбокс трея).</param>
-public sealed record AppSettings(bool SuppressWithoutListener = false, bool Autostart = false);
+/// <param name="Language">Язык UI: "ru" | "en" | null — язык ОС.</param>
+public sealed record AppSettings(bool SuppressWithoutListener = false, bool Autostart = false, string? Language = null);

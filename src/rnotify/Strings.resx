@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!--
+    Нейтральные строки UI (английский; S6.2). Русский — Strings.ru.resx.
+    Диагностические ЗНАЧЕНИЯ панели не переводим (канал владельца);
+    термины «Э1»/«Consent (Э2)» остаются как есть в обоих языках.
+    -->
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="TrayMenuPanel" xml:space="preserve"><value>Panel</value></data>
+  <data name="TrayMenuAutostart" xml:space="preserve"><value>Autostart</value></data>
+  <data name="TrayMenuExit" xml:space="preserve"><value>Exit</value></data>
+  <data name="PanelHeader" xml:space="preserve"><value>Package identity</value></data>
+  <data name="CopyAll" xml:space="preserve"><value>Copy all</value></data>
+  <data name="CopiedFormat" xml:space="preserve"><value>Copied ({0})</value></data>
+  <data name="CopyFailedPrefix" xml:space="preserve"><value>Failed: </value></data>
+  <data name="RowMode" xml:space="preserve"><value>Mode</value></data>
+  <data name="RowIdentityMatch" xml:space="preserve"><value>Identity match</value></data>
+  <data name="RowSettings" xml:space="preserve"><value>Settings</value></data>
+  <data name="RowTray" xml:space="preserve"><value>Tray</value></data>
+  <data name="RowRules" xml:space="preserve"><value>Rules</value></data>
+  <data name="RowListener" xml:space="preserve"><value>Listener</value></data>
+  <data name="RowSnapshot" xml:space="preserve"><value>Snapshot</value></data>
+  <data name="RowStack" xml:space="preserve"><value>Stack</value></data>
+  <data name="RowAutostart" xml:space="preserve"><value>Autostart</value></data>
+</root>
