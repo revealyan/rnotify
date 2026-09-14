@@ -50,4 +50,10 @@
     <Resource Include="Assets\rnotify.ico" />
   </ItemGroup>
 
+  <!-- S6.2: локализация UI — en-нейтральный (Strings.resx) + ru-сателлит
+       (Strings.ru.resx); язык — ОС + override settings.json language.
+       Класс-обёртка Strings.cs — руками (dotnet build не запускает VS-генератор). -->
+  <PropertyGroup>
+    <NeutralLanguage>en</NeutralLanguage>
+  </PropertyGroup>
 </Project>

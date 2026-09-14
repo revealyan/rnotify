@@ -1,6 +1,8 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Windows;
 using rnotify.Core;
+using rnotify.Core.Settings;
 
 namespace rnotify;
 
@@ -44,6 +46,10 @@ public partial class App : Application
 		_showPanelSignal = new EventWaitHandle(false, EventResetMode.AutoReset, ProductIdentity.ShowPanelEventName);
 		base.OnStartup(e);
 
+		// S6.2: язык — ДО создания окна (x:Static в XAML и строки трея читают
+		// CurrentUICulture). Язык ОС + override settings.json language.
+		ApplyLanguage(new AppSettingsStore().LoadOrDefault().Settings.Language);
+
 		// StartupUri убран: окно создаём руками. Активация StartupTask (запуск
 		// системы) — старт сразу в трей (решение план-гейта S6.1): Show+Hide в
 		// одном кадре — Loaded стреляет (инициализация живёт в OnLoaded), а
@@ -79,6 +85,26 @@ public partial class App : Application
 				MainWindow?.Activate();
 			});
 		}
+	}
+
+	// S6.2: "ru"/"en" — явный override (ru-сателлит/нейтральный en), null —
+	// язык ОС. CurrentCulture (форматы) не трогаем — только язык ресурсов.
+	// LanguageProperty.OverrideMetadata — чтобы XAML-привязки формулировали
+	// числа/даты в выбранной культуре.
+	private static void ApplyLanguage(string? language)
+	{
+		CultureInfo culture = language switch
+		{
+			"ru" => new CultureInfo("ru-RU"),
+			"en" => new CultureInfo("en-US"),
+			_ => CultureInfo.CurrentUICulture,
+		};
+
+		Thread.CurrentThread.CurrentUICulture = culture;
+		System.Windows.FrameworkElement.LanguageProperty.OverrideMetadata(
+			typeof(System.Windows.FrameworkElement),
+			new System.Windows.FrameworkPropertyMetadata(
+				System.Windows.Markup.XmlLanguage.GetLanguage(culture.IetfLanguageTag)));
 	}
 
 	// Активация StartupTask (запуск системы) — AppLifecycle от WinSDK-проекций.

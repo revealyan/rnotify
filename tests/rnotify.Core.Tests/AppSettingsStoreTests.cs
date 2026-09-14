@@ -75,6 +75,7 @@ public sealed class AppSettingsStoreTests
 		Assert.Null(result.Error);
 		Assert.True(result.Settings.SuppressWithoutListener);
 		Assert.False(result.Settings.Autostart); // поле пришло в S6.1 — старые файлы совместимы
+		Assert.Null(result.Settings.Language);   // S6.2: без поля — язык ОС
 	}
 
 	[Fact]
@@ -85,12 +86,13 @@ public sealed class AppSettingsStoreTests
 		AppSettingsStore store = new(path);
 		_ = store.LoadOrDefault(); // файл создан дефолтным
 
-		store.Save(new AppSettings(SuppressWithoutListener: true, Autostart: true));
+		store.Save(new AppSettings(SuppressWithoutListener: true, Autostart: true, Language: "ru"));
 
 		AppSettingsLoadResult reread = store.LoadOrDefault();
 		Assert.Null(reread.Error);
 		Assert.True(reread.Settings.SuppressWithoutListener);
 		Assert.True(reread.Settings.Autostart);
+		Assert.Equal("ru", reread.Settings.Language); // S6.2: язык UI round-trip
 		Assert.False(File.Exists(path + ".tmp")); // атомарно: tmp-мусора не остаётся
 	}
 }

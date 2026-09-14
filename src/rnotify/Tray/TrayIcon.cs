@@ -125,10 +125,10 @@ internal sealed class TrayIcon : IDisposable
 		IntPtr menu = CreatePopupMenu();
 		try
 		{
-			_ = AppendMenuW(menu, _mfString, _menuPanel, "Панель");
-			_ = AppendMenuW(menu, _mfString | (AutostartChecked ? _mfChecked : 0), _menuAutostart, "Автозапуск");
+			_ = AppendMenuW(menu, _mfString, _menuPanel, Strings.TrayMenuPanel);
+			_ = AppendMenuW(menu, _mfString | (AutostartChecked ? _mfChecked : 0), _menuAutostart, Strings.TrayMenuAutostart);
 			_ = AppendMenuW(menu, _mfSeparator, 0, "");
-			_ = AppendMenuW(menu, _mfString, _menuExit, "Выход");
+			_ = AppendMenuW(menu, _mfString, _menuExit, Strings.TrayMenuExit);
 
 			_ = GetCursorPos(out POINT pt);
 			// Танец: без SetForegroundWindow меню не закрывается кликом мимо;

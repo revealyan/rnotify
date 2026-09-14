@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -51,6 +52,9 @@ public partial class MainWindow : Window
 	private readonly Lock _selfRemovedGate = new();
 	private HashSet<uint> _selfRemoved = [];
 	private readonly List<(string Key, string Value)> _rows = [];
+	// CompositeFormat-кэш (CA1863): смена языка — перезапуском, формат статичен.
+	private static readonly global::System.Text.CompositeFormat _copiedFormat =
+		global::System.Text.CompositeFormat.Parse(Strings.CopiedFormat);
 
 	public MainWindow()
 	{
@@ -108,7 +112,7 @@ public partial class MainWindow : Window
 		}
 		catch (Exception ex)
 		{
-			AddRow("Листенер", $"ошибка запуска: {ex.Message}");
+			AddRow(Strings.RowListener, $"ошибка запуска: {ex.Message}");
 		}
 	}
 
@@ -152,7 +156,7 @@ public partial class MainWindow : Window
 		AppSettingsLoadResult load = _settingsStore.LoadOrDefault();
 		_settings = load.Settings;
 		string values = $"suppressWithoutListener={_settings.SuppressWithoutListener}, autostart={_settings.Autostart}";
-		AddRow("Настройки", load.Error is { } error ? $"ошибка: {error.Message} — дефолт {values}" : $"{_settingsStore.FilePath}: {values}");
+		AddRow(Strings.RowSettings, load.Error is { } error ? $"ошибка: {error.Message} — дефолт {values}" : $"{_settingsStore.FilePath}: {values}");
 	}
 
 	// Трей — до всего живого: «Выход» обязан работать даже если фид/правила
@@ -173,11 +177,11 @@ public partial class MainWindow : Window
 			_tray.AutostartToggled += OnTrayAutostart;
 			_tray.AutostartChecked = _settings.Autostart;
 			_tray.Show();
-			AddRow("Трей", "иконка в области уведомлений (закрытие окна = свернуть сюда)");
+			AddRow(Strings.RowTray, "иконка в области уведомлений (закрытие окна = свернуть сюда)");
 		}
 		catch (Exception ex)
 		{
-			AddRow("Трей", $"не встал: {ex.Message} — выход по закрытию окна невозможен, процесс жив");
+			AddRow(Strings.RowTray, $"не встал: {ex.Message} — выход по закрытию окна невозможен, процесс жив");
 		}
 	}
 
@@ -199,11 +203,11 @@ public partial class MainWindow : Window
 				_tray.AutostartChecked = enabled;
 			}
 
-			AddRow("Автозапуск", enabled ? $"включён (state: {state})" : $"не включился (state: {state})");
+			AddRow(Strings.RowAutostart, enabled ? $"включён (state: {state})" : $"не включился (state: {state})");
 		}
 		catch (Exception ex)
 		{
-			AddRow("Автозапуск", $"не переключился: {ex.Message}");
+			AddRow(Strings.RowAutostart, $"не переключился: {ex.Message}");
 		}
 	}
 
@@ -222,11 +226,11 @@ public partial class MainWindow : Window
 		_rules = new RulesReloader(store);
 		if (_rules.StartupError is { } error)
 		{
-			AddRow("Правила", $"ошибка: {error.Message} — работаем на дефолте");
+			AddRow(Strings.RowRules, $"ошибка: {error.Message} — работаем на дефолте");
 		}
 		else
 		{
-			AddRow("Правила", $"{store.FilePath}: {DescribeRules(_rules.Current)}");
+			AddRow(Strings.RowRules, $"{store.FilePath}: {DescribeRules(_rules.Current)}");
 		}
 
 		_rules.Reloaded += OnRulesReloaded;
@@ -349,19 +353,19 @@ public partial class MainWindow : Window
 	// Трейс стека карточек (контракт: событие всегда на Dispatcher).
 	private void OnStackTrace(object? sender, CardTraceEventArgs e)
 	{
-		AddRow("Стек", e.Message);
+		AddRow(Strings.RowStack, e.Message);
 	}
 
 	private void OnSnapshotFailed(object? sender, NotificationFailedEventArgs e)
 	{
-		_ = Dispatcher.BeginInvoke(() => AddRow("Снапшот", $"ошибка: {e.Error.Message}"));
+		_ = Dispatcher.BeginInvoke(() => AddRow(Strings.RowSnapshot, $"ошибка: {e.Error.Message}"));
 	}
 
 	// Хот-релоад: движок уже подменён релоадером, окну остаётся сказать вслух.
 	private void OnRulesReloaded(object? sender, RulesReloadedEventArgs e)
 	{
 		_ = Dispatcher.BeginInvoke(() => AddRow(
-			"Правила",
+			Strings.RowRules,
 			e.Success
 				? $"перезагружено: {DescribeRules(e.Engine)}"
 				: $"ошибка: {e.Error!.Message} — работает прежний конфиг"));
@@ -468,13 +472,13 @@ public partial class MainWindow : Window
 		try
 		{
 			PackageId id = Package.Current.Id;
-			AddRow("Режим", "packaged (MSIX)");
+			AddRow(Strings.RowMode, "packaged (MSIX)");
 			AddRow("Name", id.Name);
 			AddRow("Version", $"{id.Version.Major}.{id.Version.Minor}.{id.Version.Build}.{id.Version.Revision}");
 			AddRow("Publisher", id.Publisher);
 			AddRow("FamilyName", id.FamilyName);
 			AddRow(
-				"Совпадение с ProductIdentity",
+				Strings.RowIdentityMatch,
 				string.Equals(id.Name, ProductIdentity.Name, StringComparison.Ordinal)
 				&& string.Equals(id.Publisher, ProductIdentity.Publisher, StringComparison.Ordinal)
 					? "да"
@@ -483,7 +487,7 @@ public partial class MainWindow : Window
 		catch (InvalidOperationException)
 		{
 			// Package.Current вне пакета (unpackage F5-запуск) кидает — это норма.
-			AddRow("Режим", "не в пакете (unpackaged, F5)");
+			AddRow(Strings.RowMode, "не в пакете (unpackaged, F5)");
 		}
 	}
 
@@ -491,15 +495,15 @@ public partial class MainWindow : Window
 	// в сессию Claude). Буфер может быть занят чужим процессом — ExternalException.
 	private void OnCopyClick(object sender, RoutedEventArgs e)
 	{
-		CopyButton.Content = "Скопировать всё";
+		CopyButton.Content = Strings.CopyAll;
 		try
 		{
 			Clipboard.SetText(string.Join(Environment.NewLine, _rows.Select(r => $"{r.Key} = {r.Value}")));
-			CopyButton.Content = $"Скопировано ({_rows.Count})";
+			CopyButton.Content = string.Format(CultureInfo.InvariantCulture, _copiedFormat, _rows.Count);
 		}
 		catch (System.Runtime.InteropServices.ExternalException ex)
 		{
-			CopyButton.Content = $"Не вышло: {ex.Message}";
+			CopyButton.Content = Strings.CopyFailedPrefix + ex.Message;
 		}
 	}
 
