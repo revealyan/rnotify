@@ -20,4 +20,7 @@ public static class ProductIdentity
 
 	/// <summary>Имя мьютекса single-instance: диспетчер уведомлений всегда один.</summary>
 	public static readonly string MutexName = @"Local\rnotify-single-instance";
+
+	/// <summary>Имя EventWaitHandle «покажи панель»: второй инстанс сигналит живому (S6.1).</summary>
+	public static readonly string ShowPanelEventName = @"Local\rnotify-show-panel";
 }

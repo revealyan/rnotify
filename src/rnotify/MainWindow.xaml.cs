@@ -1,6 +1,8 @@
 using System.Diagnostics.CodeAnalysis;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media.Imaging;
 using Windows.ApplicationModel;
 using rnotify.Core;
 using rnotify.Core.Listener;
@@ -8,6 +10,7 @@ using rnotify.Core.Rules;
 using rnotify.Core.Settings;
 using rnotify.Core.Suppression;
 using rnotify.Render;
+using rnotify.Tray;
 
 namespace rnotify;
 
@@ -18,8 +21,9 @@ namespace rnotify;
 /// с вердиктом; show-вердикт открывает карточку стека, delete/killNative
 /// сносят нативную копию из Центра живьём, чужой Removed гасит карточку;
 /// после consent фида применяется формула Э1 (глобальный тумблер + blanket
-/// ShowBanner=0), на выходе — возврат прежних значений. Запуск вне пакета
-/// (F5) — так и пишет.
+/// ShowBanner=0), на выходе — возврат прежних значений. S6.1: закрытие окна
+/// сворачивает в трей (демон жив, Э1 держится) — настоящий выход из меню
+/// трея. Запуск вне пакета (F5) — так и пишет.
 /// </summary>
 [SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable",
 	Justification = "Жизненный цикл _feed/_stack/_rulesMonitor — окно: Dispose в OnClosed (см. прецедент App с мьютексом)")]
@@ -35,6 +39,10 @@ public partial class MainWindow : Window
 	private RulesMonitor? _rulesMonitor;
 	private CardStack? _stack;
 	private NativeBannerSuppressor? _suppressor;
+	private TrayIcon? _tray;
+	// S6.1: закрытие окна = свернуть в трей; настоящий выход (меню трея
+	// «Выход») ставит флаг и доезжает до разборки OnClosed.
+	private bool _exiting;
 	// Анти-самоснос (канон §10c): killNative = показать свою карточку И снести
 	// нативную копию — собственный Removed-дифф не должен гасить эту карточку.
 	private readonly Lock _selfRemovedGate = new();
@@ -45,6 +53,22 @@ public partial class MainWindow : Window
 	{
 		InitializeComponent();
 		Loaded += OnLoaded;
+		TrySetWindowIcon();
+	}
+
+	// Иконка окна — тем же Assets/rnotify.ico, что и трей; отсутствие файла
+	// (странная сборка) не должно ронять окно.
+	private void TrySetWindowIcon()
+	{
+		try
+		{
+			string iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "rnotify.ico");
+			Icon = new BitmapImage(new Uri(iconPath, UriKind.Absolute));
+		}
+		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or UriFormatException)
+		{
+			// Окно без иконки живо; трей скажет своей ошибкой, если файла нет совсем.
+		}
 	}
 
 	// async void — WPF-обработчик (прецедент спайка S5.2); тело под try/catch.
@@ -53,6 +77,7 @@ public partial class MainWindow : Window
 	private async void OnLoaded(object sender, RoutedEventArgs e)
 	{
 		ShowIdentity();
+		StartTray();
 		try
 		{
 			StartRules();
@@ -120,6 +145,37 @@ public partial class MainWindow : Window
 		}
 	}
 
+	// Трей — до всего живого: «Выход» обязан работать даже если фид/правила
+	// упали на старте (демон без панели всё равно управляем).
+	[SuppressMessage("Design", "CA1031:Do not catch general exception types",
+		Justification = "Трей — жизненно важный орган демона, но его отказ не должен ронять панель: строка и живём")]
+	private void StartTray()
+	{
+		try
+		{
+			_tray = TrayIcon.Create();
+			_tray.PanelRequested += (_, _) =>
+			{
+				Show();
+				Activate();
+			};
+			_tray.ExitRequested += OnTrayExit;
+			_tray.Show();
+		}
+		catch (Exception ex)
+		{
+			AddRow("Трей", $"не встал: {ex.Message} — выход по закрытию окна невозможен, процесс жив");
+		}
+	}
+
+	// Меню трея «Выход»: единственный путь к настоящей разборке (OnClosing
+	// без флага отменяет закрытие и прячет окно в трей).
+	private void OnTrayExit(object? sender, EventArgs e)
+	{
+		_exiting = true;
+		Close();
+	}
+
 	// Правила грузятся ДО старта фида: первый же тост получает вердикт.
 	private void StartRules()
 	{
@@ -138,11 +194,29 @@ public partial class MainWindow : Window
 		_rulesMonitor = new RulesMonitor(store, _rules);
 	}
 
+	// S6.1: закрытие окна (X) = свернуть в трей — демон жив, Э1 держится,
+	// разборка (ниже в OnClosed) не запускается. Настоящий выход ставит
+	// _exiting (меню трея «Выход») и доезжает до OnClosed.
+	protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+	{
+		if (!_exiting)
+		{
+			e.Cancel = true;
+			Hide();
+			return;
+		}
+
+		base.OnClosing(e);
+	}
+
 	[SuppressMessage("Design", "CA1031:Do not catch general exception types",
 		Justification = "Граница выхода: неудача возврата формулы Э1 не должна ронять закрытие — маркер остаётся, следующий старт чинит")]
 	protected override void OnClosed(EventArgs e)
 	{
-		// Стек — первым (карточки и вотчер стола), затем монитор и отписка:
+		// Трей — первым: иконка исчезает раньше всего живого.
+		_tray?.Dispose();
+
+		// Стек — следующим (карточки и вотчер стола), затем монитор и отписка:
 		// не перезагрузиться в момент разборки; опаздывающий BeginInvoke на
 		// погашенном Dispatcher абортится молча.
 		_stack?.Dispose();
@@ -172,6 +246,9 @@ public partial class MainWindow : Window
 		}
 
 		base.OnClosed(e);
+
+		// OnExplicitShutdown (S6.1): окно закрыто — жизнь процесса в наших руках.
+		Application.Current.Shutdown();
 	}
 
 	// События фида приходят из пула потоков — маршалит на Dispatcher

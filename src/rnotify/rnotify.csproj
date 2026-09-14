@@ -43,4 +43,11 @@
     <ProjectReference Include="..\rnotify.Core\rnotify.Core.csproj" />
   </ItemGroup>
 
+  <!-- Иконка трея/окна — ФАЙЛОМ в пакете (PNG-ассеты уезжают в resources.pri,
+       а LoadImage для Shell_NotifyIcon читает с диска; трей ждёт
+       <BaseDirectory>/Assets/rnotify.ico). -->
+  <ItemGroup>
+    <Content Include="Assets\rnotify.ico" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
