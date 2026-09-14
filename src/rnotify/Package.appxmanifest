@@ -3,6 +3,7 @@
      ProductIdentity в rnotify.Core — менять синхронно в трёх местах. -->
 <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
          xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+         xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5"
          xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
          xmlns:desktop6="http://schemas.microsoft.com/appx/manifest/desktop/windows10/6">
 
@@ -35,6 +36,14 @@
                           BackgroundColor="transparent"
                           Square150x150Logo="Assets\Square150x150Logo.png"
                           Square44x44Logo="Assets\Square44x44Logo.png" />
+      <!-- S6.1 автозапуск: Enabled=false — включается чекбоксом трея
+           (StartupTask.RequestEnableAsync), не навязанно при установке;
+           стор-требование к startupTask. -->
+      <Extensions>
+        <uap5:Extension Category="windows.startupTask" Executable="rnotify.exe" EntryPoint="windows.fullTrustApplication">
+          <uap5:StartupTask TaskId="rnotifyStartup" Enabled="false" DisplayName="RNotify — диспетчер уведомлений" />
+        </uap5:Extension>
+      </Extensions>
     </Application>
   </Applications>
 

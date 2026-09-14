@@ -43,4 +43,11 @@
     <ProjectReference Include="..\rnotify.Core\rnotify.Core.csproj" />
   </ItemGroup>
 
+  <!-- Иконка трея/окна — ВСТРОЕННЫМ ресурсом сборки (pack URI): LoadImage по
+       файлу из WindowsApps ловит ERROR_FILE_NOT_FOUND (грабля S6.1), HICON
+       строится из байтов CreateIconFromResourceEx. -->
+  <ItemGroup>
+    <Resource Include="Assets\rnotify.ico" />
+  </ItemGroup>
+
 </Project>

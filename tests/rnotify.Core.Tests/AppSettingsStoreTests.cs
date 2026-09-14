@@ -61,4 +61,36 @@ public sealed class AppSettingsStoreTests
 		Assert.False(result.Settings.SuppressWithoutListener);
 		Assert.Equal("{ кривой json", File.ReadAllText(path));
 	}
+
+	[Fact]
+	public void Старый_файл_без_autostart_читается_дефолтом_поля()
+	{
+		using TempDir dir = new();
+		string path = dir.PathFor("settings.json");
+		File.WriteAllText(path, """{ "suppressWithoutListener": true }""");
+		AppSettingsStore store = new(path);
+
+		AppSettingsLoadResult result = store.LoadOrDefault();
+
+		Assert.Null(result.Error);
+		Assert.True(result.Settings.SuppressWithoutListener);
+		Assert.False(result.Settings.Autostart); // поле пришло в S6.1 — старые файлы совместимы
+	}
+
+	[Fact]
+	public void Save_пишет_autostart_и_перечитывается_без_мусора()
+	{
+		using TempDir dir = new();
+		string path = dir.PathFor("settings.json");
+		AppSettingsStore store = new(path);
+		_ = store.LoadOrDefault(); // файл создан дефолтным
+
+		store.Save(new AppSettings(SuppressWithoutListener: true, Autostart: true));
+
+		AppSettingsLoadResult reread = store.LoadOrDefault();
+		Assert.Null(reread.Error);
+		Assert.True(reread.Settings.SuppressWithoutListener);
+		Assert.True(reread.Settings.Autostart);
+		Assert.False(File.Exists(path + ".tmp")); // атомарно: tmp-мусора не остаётся
+	}
 }

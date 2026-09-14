@@ -1,6 +1,8 @@
 using System.Diagnostics.CodeAnalysis;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media.Imaging;
 using Windows.ApplicationModel;
 using rnotify.Core;
 using rnotify.Core.Listener;
@@ -8,6 +10,8 @@ using rnotify.Core.Rules;
 using rnotify.Core.Settings;
 using rnotify.Core.Suppression;
 using rnotify.Render;
+using rnotify.Tray;
+using StartupTaskState = Windows.ApplicationModel.StartupTaskState;
 
 namespace rnotify;
 
@@ -18,8 +22,9 @@ namespace rnotify;
 /// с вердиктом; show-вердикт открывает карточку стека, delete/killNative
 /// сносят нативную копию из Центра живьём, чужой Removed гасит карточку;
 /// после consent фида применяется формула Э1 (глобальный тумблер + blanket
-/// ShowBanner=0), на выходе — возврат прежних значений. Запуск вне пакета
-/// (F5) — так и пишет.
+/// ShowBanner=0), на выходе — возврат прежних значений. S6.1: закрытие окна
+/// сворачивает в трей (демон жив, Э1 держится) — настоящий выход из меню
+/// трея. Запуск вне пакета (F5) — так и пишет.
 /// </summary>
 [SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable",
 	Justification = "Жизненный цикл _feed/_stack/_rulesMonitor — окно: Dispose в OnClosed (см. прецедент App с мьютексом)")]
@@ -35,6 +40,12 @@ public partial class MainWindow : Window
 	private RulesMonitor? _rulesMonitor;
 	private CardStack? _stack;
 	private NativeBannerSuppressor? _suppressor;
+	private TrayIcon? _tray;
+	private AppSettingsStore? _settingsStore;
+	private AppSettings _settings = new();
+	// S6.1: закрытие окна = свернуть в трей; настоящий выход (меню трея
+	// «Выход») ставит флаг и доезжает до разборки OnClosed.
+	private bool _exiting;
 	// Анти-самоснос (канон §10c): killNative = показать свою карточку И снести
 	// нативную копию — собственный Removed-дифф не должен гасить эту карточку.
 	private readonly Lock _selfRemovedGate = new();
@@ -45,6 +56,22 @@ public partial class MainWindow : Window
 	{
 		InitializeComponent();
 		Loaded += OnLoaded;
+		TrySetWindowIcon();
+	}
+
+	// Иконка окна — тем же встроенным Assets/rnotify.ico, что и трей (pack URI:
+	// файл в WindowsApps для LoadImage-пути недоступен, грабля S6.1); сбой
+	// ресурса не должен ронять окно.
+	private void TrySetWindowIcon()
+	{
+		try
+		{
+			Icon = new BitmapImage(new Uri("pack://application:,,,/Assets/rnotify.ico"));
+		}
+		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or UriFormatException)
+		{
+			// Окно без иконки живо; трей скажет своей ошибкой, если ресурса нет совсем.
+		}
 	}
 
 	// async void — WPF-обработчик (прецедент спайка S5.2); тело под try/catch.
@@ -53,6 +80,8 @@ public partial class MainWindow : Window
 	private async void OnLoaded(object sender, RoutedEventArgs e)
 	{
 		ShowIdentity();
+		LoadSettings();
+		StartTray();
 		try
 		{
 			StartRules();
@@ -93,13 +122,7 @@ public partial class MainWindow : Window
 		Justification = "Граница UI: сбой применения формулы показываем строкой и живём на нативных баннерах")]
 	private void StartSuppression(NotificationAccessStatus consent)
 	{
-		AppSettingsStore settingsStore = new();
-		AppSettingsLoadResult settings = settingsStore.LoadOrDefault();
-		AddRow("Настройки", settings.Error is { } error
-			? $"ошибка: {error.Message} — дефолт suppressWithoutListener={settings.Settings.SuppressWithoutListener}"
-			: $"{settingsStore.FilePath}: suppressWithoutListener={settings.Settings.SuppressWithoutListener}");
-
-		if (consent != NotificationAccessStatus.Allowed && !settings.Settings.SuppressWithoutListener)
+		if (consent != NotificationAccessStatus.Allowed && !_settings.SuppressWithoutListener)
 		{
 			AddRow("Э1", $"consent {consent} — нативные баннеры не гасим");
 			return;
@@ -120,6 +143,78 @@ public partial class MainWindow : Window
 		}
 	}
 
+	// Настройки — раньше трея: чекбокс «Автозапуск» берётся из settings.json
+	// (зеркало чекбокса; системная истина — StartupTask, показывается строкой
+	// при переключении).
+	private void LoadSettings()
+	{
+		_settingsStore = new AppSettingsStore();
+		AppSettingsLoadResult load = _settingsStore.LoadOrDefault();
+		_settings = load.Settings;
+		string values = $"suppressWithoutListener={_settings.SuppressWithoutListener}, autostart={_settings.Autostart}";
+		AddRow("Настройки", load.Error is { } error ? $"ошибка: {error.Message} — дефолт {values}" : $"{_settingsStore.FilePath}: {values}");
+	}
+
+	// Трей — до всего живого: «Выход» обязан работать даже если фид/правила
+	// упали на старте (демон без панели всё равно управляем).
+	[SuppressMessage("Design", "CA1031:Do not catch general exception types",
+		Justification = "Трей — жизненно важный орган демона, но его отказ не должен ронять панель: строка и живём")]
+	private void StartTray()
+	{
+		try
+		{
+			_tray = TrayIcon.Create();
+			_tray.PanelRequested += (_, _) =>
+			{
+				Show();
+				Activate();
+			};
+			_tray.ExitRequested += OnTrayExit;
+			_tray.AutostartToggled += OnTrayAutostart;
+			_tray.AutostartChecked = _settings.Autostart;
+			_tray.Show();
+			AddRow("Трей", "иконка в области уведомлений (закрытие окна = свернуть сюда)");
+		}
+		catch (Exception ex)
+		{
+			AddRow("Трей", $"не встал: {ex.Message} — выход по закрытию окна невозможен, процесс жив");
+		}
+	}
+
+	// Чекбокс «Автозапуск»: WinRT StartupTask + зеркало в settings.json;
+	// итог — состояние системы (юзер/политика могли не дать включить).
+	[SuppressMessage("Design", "CA1031:Do not catch general exception types",
+		Justification = "Граница UI: сбой StartupTask (unpackaged F5, политика) — строка в панель, демону всё равно")]
+	private async void OnTrayAutostart(object? sender, EventArgs e)
+	{
+		bool desired = !_settings.Autostart;
+		try
+		{
+			StartupTaskState state = await AutostartManager.SetAsync(desired).ConfigureAwait(true);
+			bool enabled = state == StartupTaskState.Enabled;
+			_settings = _settings with { Autostart = enabled };
+			_settingsStore?.Save(_settings);
+			if (_tray is not null)
+			{
+				_tray.AutostartChecked = enabled;
+			}
+
+			AddRow("Автозапуск", enabled ? $"включён (state: {state})" : $"не включился (state: {state})");
+		}
+		catch (Exception ex)
+		{
+			AddRow("Автозапуск", $"не переключился: {ex.Message}");
+		}
+	}
+
+	// Меню трея «Выход»: единственный путь к настоящей разборке (OnClosing
+	// без флага отменяет закрытие и прячет окно в трей).
+	private void OnTrayExit(object? sender, EventArgs e)
+	{
+		_exiting = true;
+		Close();
+	}
+
 	// Правила грузятся ДО старта фида: первый же тост получает вердикт.
 	private void StartRules()
 	{
@@ -138,11 +233,29 @@ public partial class MainWindow : Window
 		_rulesMonitor = new RulesMonitor(store, _rules);
 	}
 
+	// S6.1: закрытие окна (X) = свернуть в трей — демон жив, Э1 держится,
+	// разборка (ниже в OnClosed) не запускается. Настоящий выход ставит
+	// _exiting (меню трея «Выход») и доезжает до OnClosed.
+	protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+	{
+		if (!_exiting)
+		{
+			e.Cancel = true;
+			Hide();
+			return;
+		}
+
+		base.OnClosing(e);
+	}
+
 	[SuppressMessage("Design", "CA1031:Do not catch general exception types",
 		Justification = "Граница выхода: неудача возврата формулы Э1 не должна ронять закрытие — маркер остаётся, следующий старт чинит")]
 	protected override void OnClosed(EventArgs e)
 	{
-		// Стек — первым (карточки и вотчер стола), затем монитор и отписка:
+		// Трей — первым: иконка исчезает раньше всего живого.
+		_tray?.Dispose();
+
+		// Стек — следующим (карточки и вотчер стола), затем монитор и отписка:
 		// не перезагрузиться в момент разборки; опаздывающий BeginInvoke на
 		// погашенном Dispatcher абортится молча.
 		_stack?.Dispose();
@@ -172,6 +285,9 @@ public partial class MainWindow : Window
 		}
 
 		base.OnClosed(e);
+
+		// OnExplicitShutdown (S6.1): окно закрыто — жизнь процесса в наших руках.
+		Application.Current.Shutdown();
 	}
 
 	// События фида приходят из пула потоков — маршалит на Dispatcher
