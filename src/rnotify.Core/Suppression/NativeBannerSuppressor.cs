@@ -75,18 +75,32 @@ public sealed class NativeBannerSuppressor : IDisposable
 				return;
 			}
 
-			if (RepairMarkerCore())
+			// Крах прошлой сессии (живой прогон S7.1): ПРИНИМАЕМ снапшот маркера
+			// как priors БЕЗ переписывания реестра — промежуточный ремонт писал
+			// global=1 и на холодном старте (фид уже слушает, Apply ещё пишет 38
+			// значений) тост в зазоре давал карточку И нативный баннер. Реального
+			// включения баннеров на пути применения больше нет вообще.
+			SuppressionSnapshot? stale = TryReadMarker();
+			if (stale is not null)
 			{
-				Trace?.Invoke(this, new SuppressionTraceEventArgs("Э1: маркер прошлой сессии — реестр отремонтирован перед применением"));
+				RepairedFromCrash = true; // юзер не видел мёртвый интервал — догонялке важно
+				Trace?.Invoke(this, new SuppressionTraceEventArgs("Э1: маркер прошлой сессии принят как прежние значения (без включения баннеров)"));
+				TryDeleteMarker();
 			}
 
 			IReadOnlyList<string> senders = _registry.GetSenderKeys();
 			Dictionary<string, int?> priors = [];
 			foreach (string aumid in senders)
 			{
-				priors[aumid] = _registry.GetSenderDword(aumid, ShowBannerName);
+				// Приор из маркера краха — истина (в реестре сейчас наши нули);
+				// нового отправителя читаем как есть (появился после краха —
+				// его «до нас» могло быть только отсутствие значения).
+				priors[aumid] = stale is not null && stale.AppShowBanner.TryGetValue(aumid, out int? prior)
+					? prior
+					: _registry.GetSenderDword(aumid, ShowBannerName);
 			}
-			SuppressionSnapshot snapshot = new(_registry.GetRootDword(GlobalToastsEnabledName), priors);
+
+			SuppressionSnapshot snapshot = new(stale?.GlobalToastsEnabled ?? _registry.GetRootDword(GlobalToastsEnabledName), priors);
 
 			// Маркер ДО записей: крах посреди blanket оставит репею прежние значения.
 			WriteMarker(snapshot);

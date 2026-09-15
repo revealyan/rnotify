@@ -64,8 +64,9 @@ public partial class CardWindow : Window
 	// PMv2-манифест, WPF считает масштаб сам. offsetDip — сдвиг вверх (стек).
 	private void PlaceAtToastZone()
 	{
-		Left = SystemParameters.WorkArea.Right - Width - 12;
-		Top = SystemParameters.WorkArea.Bottom - Height - 12 - _offsetDip;
+		Rect area = ScreenPicker.WorkArea();
+		Left = area.Right - Width - 12;
+		Top = area.Bottom - Height - 12 - _offsetDip;
 	}
 
 	protected override void OnSourceInitialized(EventArgs e)

@@ -61,7 +61,7 @@ public sealed class NativeBannerSuppressorTests : IDisposable
 	}
 
 	[Fact]
-	public void Apply_чинит_реестр_по_маркеру_прошлой_сессии_и_не_теряет_priors()
+	public void Apply_принимает_маркер_краха_без_включения_баннеров()
 	{
 		// Сессия 1: применяла формулу и рухнула без Restore — маркер остался на диске.
 		// Dispose не зовём (страховочная сетка вернула бы реестр): подавитель
@@ -82,9 +82,13 @@ public sealed class NativeBannerSuppressorTests : IDisposable
 
 		second.Apply();
 
-		Assert.Contains(trace, m => m.Contains("отремонтирован", StringComparison.Ordinal));
-		// После ремонта формула применена заново, но свежий снимок хранит ИСХОДНЫЙ
-		// prior (1), а не остаток краха (0) — возврат возвращает пользователю его 1.
+		// S7.1: маркер ПРИНЯТ как priors — без промежуточного ремонта
+		// (ремонт писал global=1 и на холодном старте тост в зазоре давал
+		// карточку И нативный баннер).
+		Assert.Contains(trace, m => m.Contains("принят как прежние значения", StringComparison.Ordinal));
+		Assert.True(second.RepairedFromCrash); // догонялка узнает мёртвый интервал
+											   // Свежий снимок хранит ИСХОДНЫЙ prior (1), а не остаток краха (0) —
+											   // возврат возвращает пользователю его 1.
 		second.Restore();
 		Assert.Equal(1, residue.GetSenderDword("app.b", NativeBannerSuppressor.ShowBannerName));
 	}
