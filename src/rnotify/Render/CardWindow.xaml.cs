@@ -25,6 +25,17 @@ public partial class CardWindow : Window
 	/// <summary>Клик по телу карточки при вердикте click=focus (стек поднимает отправителя).</summary>
 	internal event EventHandler? FocusRequested;
 
+	/// <summary>Наверх topmost-полосы (пересборка z при подкладке — S8.1).</summary>
+	internal void BringToTop()
+	{
+		nint hwnd = new System.Windows.Interop.WindowInteropHelper(this).EnsureHandle();
+		_ = SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);
+	}
+
+	[DllImport("user32.dll", SetLastError = true)]
+	[return: MarshalAs(UnmanagedType.Bool)]
+	private static extern bool SetWindowPos(nint hWnd, nint after, int x, int y, int cx, int cy, uint flags);
+
 	internal uint NotificationId => _record.Id;
 
 	private readonly NotificationRecord _record;

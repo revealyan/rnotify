@@ -162,7 +162,9 @@ public partial class RulesWindow : Window
 		AddField(fields, 2, 2, "ttl", TextBoxFor(rule.Ttl, v => rule.Ttl = v));
 		AddCombo(fields, 3, 0, "click", [null, "close", "focus"], rule.Click, v => rule.Click = v);
 		AddCheck(fields, 3, 1, "killNative", rule.KillNative ?? false, v => rule.KillNative = v);
-		AddCheck(fields, 3, 2, "overFullscreen", rule.OverFullscreen ?? false, v => rule.OverFullscreen = v);
+		AddCheck(fields, 3, 2, "hideOnFullscreen", rule.HideOnFullscreen ?? false, v => rule.HideOnFullscreen = v);
+		AddField(fields, 4, 0, "sound (.wav)", TextBoxFor(rule.Sound, v => rule.Sound = v));
+		fields.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
 		Border card = new()
 		{

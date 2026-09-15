@@ -37,12 +37,24 @@ public partial class CatchUpBanner : Window
 	{
 		Rect area = ScreenPicker.WorkArea();
 		Left = area.Right - Width - 12;
-		MoveAbove(3); // стартовая позиция — под полную тройку, дальше ездит со стеком
+		MoveAbove(); // фиксированное место над полной подкладкой (S8.1)
 	}
 
-	/// <summary>Ездит со стеком: прижата к верхней карточке (её верх − зазор 16).</summary>
-	internal void MoveAbove(int stackCount) => Top = ScreenPicker.WorkArea().Bottom - Height - 12
-		- (124 + Math.Max(0, stackCount - 1) * 140 + 16);
+	/// <summary>
+	/// ФИКСИРОВАННОЕ место (правка живого прогона S8.1): над слотом тройки
+	/// с запасом под полную подкладку — плашка не поднимается по мере роста
+	/// и не ездит со стеком; подкладка растёт к ней снизу.
+	/// </summary>
+	internal void MoveAbove() => Top = ScreenPicker.WorkArea().Bottom - Height - 12
+		- (124 + 2 * 140 + 24); // прижата к тройке; подкладка растёт ЗА ней (z: BringToFront)
+
+	/// <summary>Наверх topmost-полосы: подложенные карточки создаются позже и садятся выше плашки (S8.1).</summary>
+	internal void BringToFront()
+	{
+		nint hwnd = new System.Windows.Interop.WindowInteropHelper(this).EnsureHandle();
+		_ = User32.SetWindowPos(hwnd, -1 /* HWND_TOPMOST: ре-вставка наверх topmost-банда */,
+			0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010 /* NOMOVE | NOSIZE | NOACTIVATE */);
+	}
 
 	protected override void OnSourceInitialized(EventArgs e)
 	{
@@ -56,6 +68,10 @@ public partial class CatchUpBanner : Window
 
 	private static class User32
 	{
+		[DllImport("user32.dll", SetLastError = true)]
+		[return: MarshalAs(UnmanagedType.Bool)]
+		internal static extern bool SetWindowPos(nint hWnd, nint after, int x, int y, int cx, int cy, uint flags);
+
 		[DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
 		internal static extern int GetWindowLong(nint hWnd, int index);
 

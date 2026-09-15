@@ -11,6 +11,7 @@ internal sealed class FakeNotificationSettings : INotificationSettingsRegistry
 {
 	private readonly Dictionary<string, int> _root = [];
 	private readonly Dictionary<string, Dictionary<string, int>> _senders = [];
+	private readonly Dictionary<string, Dictionary<string, string>> _senderStrings = [];
 
 	/// <summary>Сколько SetSenderDword выполнено (включая бросивший — до инъекции).</summary>
 	public int SenderWriteCount;
@@ -79,5 +80,29 @@ internal sealed class FakeNotificationSettings : INotificationSettingsRegistry
 		{
 			values.Remove(valueName);
 		}
+
+		if (_senderStrings.TryGetValue(senderKey, out Dictionary<string, string>? strings))
+		{
+			strings.Remove(valueName);
+		}
+	}
+
+	/// <inheritdoc/>
+	public string? GetSenderString(string senderKey, string valueName)
+		=> _senderStrings.TryGetValue(senderKey, out Dictionary<string, string>? values)
+			&& values.TryGetValue(valueName, out string? value) && value is not null ? value : null;
+
+	/// <inheritdoc/>
+	public void SetSenderString(string senderKey, string valueName, string value)
+	{
+		_senderStrings.TryAdd(senderKey, []);
+		_senderStrings[senderKey][valueName] = value;
+	}
+
+	/// <summary>Засеять строковое значение (SoundFile: "" — юзер сам заглушил).</summary>
+	public void SeedSenderString(string aumid, string valueName, string value)
+	{
+		_senderStrings.TryAdd(aumid, []);
+		_senderStrings[aumid][valueName] = value;
 	}
 }

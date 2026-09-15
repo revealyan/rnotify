@@ -62,4 +62,20 @@ public sealed class RegistryNotificationSettings : INotificationSettingsRegistry
 		using RegistryKey? sender = root?.OpenSubKey(senderKey, writable: true);
 		sender?.DeleteValue(valueName, throwOnMissingValue: false);
 	}
+
+	/// <inheritdoc/>
+	public string? GetSenderString(string senderKey, string valueName)
+	{
+		using RegistryKey? root = Registry.CurrentUser.OpenSubKey(_rootPath);
+		using RegistryKey? sender = root?.OpenSubKey(senderKey);
+		return sender?.GetValue(valueName) as string;
+	}
+
+	/// <inheritdoc/>
+	public void SetSenderString(string senderKey, string valueName, string value)
+	{
+		using RegistryKey root = Registry.CurrentUser.CreateSubKey(_rootPath, writable: true);
+		using RegistryKey sender = root.CreateSubKey(senderKey, writable: true);
+		sender.SetValue(valueName, value, RegistryValueKind.String);
+	}
 }

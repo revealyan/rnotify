@@ -9,6 +9,8 @@ namespace rnotify.Core.Rules;
 /// <param name="GroupName">Группа сработавшего правила; null — catch-all.</param>
 /// <param name="RuleName">Сработавшее правило; null — catch-all.</param>
 /// <param name="AccentHex">Цвет группы «#RRGGBB»; null — catch-all.</param>
+/// <param name="Sound">Путь к .wav, играет при показе карточки; null — тишина.</param>
+/// <param name="HideOnFullscreen">Не показывать карточку при фуллскрине foreground-окна (S8.1).</param>
 public sealed record RuleVerdict(
 	RuleAction Action,
 	TimeSpan? Ttl,
@@ -17,7 +19,9 @@ public sealed record RuleVerdict(
 	string? AccentHex,
 	bool KillNative,
 	bool OverFullscreen,
-	ClickAction Click)
+	ClickAction Click,
+	string? Sound = null,
+	bool HideOnFullscreen = false)
 {
 	/// <summary>Дефолт для непокрытого правилами: показать 5 с (диспетчер не глушит молча).</summary>
 	public static RuleVerdict CatchAll { get; } = new(
@@ -28,7 +32,9 @@ public sealed record RuleVerdict(
 		AccentHex: null,
 		KillNative: false,
 		OverFullscreen: false,
-		ClickAction.Close);
+		ClickAction.Close,
+		Sound: null,
+		HideOnFullscreen: false);
 
 	/// <summary>Нужно ли снести нативную копию из хранилища Центра (RemoveNotification).</summary>
 	public bool RequiresNativeRemoval => Action == RuleAction.Delete || KillNative;
