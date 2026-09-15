@@ -110,6 +110,7 @@ public partial class MainWindow : Window
 			// Dispatcher (контракт CardStack), AddRow напрямую.
 			_stack = new CardStack();
 			_stack.Trace += OnStackTrace;
+			_stack.TuckedChanged += (_, _) => UpdatePill();
 
 			_source = new UserNotificationSource();
 			_feed = new NotificationFeed(_source);
@@ -469,15 +470,42 @@ public partial class MainWindow : Window
 			+ (_settings.CatchUpSticky ? "липкие — закрываешь ты, подача по слотам" : "поток пачками по 1.5с")
 			+ "; скип — плашка над стеком или меню трея"
 			+ (skipped > 0 ? $", за лимитом молча: {skipped}" : string.Empty));
-		_catchUpBanner = new CatchUpBanner(_catchUpQueue.Count);
-		_catchUpBanner.SkipRequested += OnTraySkipCatchUp; // тот же обработчик: слить в floor
-		_catchUpBanner.Show();
 		if (_stack is not null)
 		{
 			_stack.SlotFreed += OnCatchUpSlotFreed;
 		}
 
+		UpdatePill();
 		PumpCatchUp();
+	}
+
+	// Плашка «Пропустить всё» (S8.1): живёт при очереди догонялки ИЛИ
+	// подложенных карточках; счётчик = сумма; скип гасит и то и другое.
+	private void UpdatePill()
+	{
+		int total = _catchUpQueue.Count + (_stack?.TuckedCount ?? 0);
+		if (total == 0)
+		{
+			CloseCatchUpBanner();
+			return;
+		}
+
+		if (_catchUpBanner is null)
+		{
+			_catchUpBanner = new CatchUpBanner(total);
+			_catchUpBanner.SkipRequested += OnTraySkipCatchUp;
+			_catchUpBanner.Show();
+		}
+		else
+		{
+			_catchUpBanner.Update(total);
+		}
+
+		if (_stack is not null)
+		{
+			_catchUpBanner.MoveAbove();
+			_catchUpBanner.BringToFront(); // подложенные создаются позже — плашка поверх
+		}
 	}
 
 	// Слот освободился (юзер закрыл карточку) — докладываем следующую догоняющую;
@@ -492,7 +520,7 @@ public partial class MainWindow : Window
 
 		if (_stack is not null && _catchUpBanner is not null)
 		{
-			_catchUpBanner.MoveAbove(_stack.VisibleCount);
+			_catchUpBanner.MoveAbove();
 			if (!_stack.HasCatchUp)
 			{
 				FinishCatchUp();
@@ -537,7 +565,8 @@ public partial class MainWindow : Window
 				shown++;
 			}
 
-			_catchUpBanner?.MoveAbove(Math.Min(CardStack.MaxCards, (_stack?.VisibleCount ?? 0) + shown));
+			_catchUpBanner?.MoveAbove();
+			UpdatePill();
 			return;
 		}
 
@@ -599,8 +628,9 @@ public partial class MainWindow : Window
 	// Меню трея «Пропустить догоняющие»: остаток очереди — молча в floor.
 	private void OnTraySkipCatchUp(object? sender, EventArgs e)
 	{
-		// Скип meaningful и при пустой очереди: липкие догоняющие ещё на экране.
-		if (_floor is null || _stack is null || (_catchUpQueue.Count == 0 && !_stack.HasCatchUp))
+		// S8.1: «скрыть всё» гасит что есть — очередь, догоняющие, подкладку,
+		// повторные из истории (грабля прогона: guard «не догоняющее» отшивал).
+		if (_floor is null || _stack is null)
 		{
 			return;
 		}
@@ -612,9 +642,10 @@ public partial class MainWindow : Window
 		}
 
 		_catchUpPacer?.Stop();
-		_stack?.CloseCatchUp();
+		_stack?.CloseAll(); // S8.1: «скрыть всё» — видимые + подложенные (+догоняющие)
 		FinishCatchUp();
-		AddRow("Догон", $"скипнуто {dropped} + экран — в Центре (Win+N)");
+		UpdatePill();
+		AddRow("Догон", $"скипнуто {dropped} + экран + подкладка — в Центре (Win+N)");
 	}
 
 	// Трейс подавления: BlanketSender стреляет из пула (событие фида) — маршалит.

@@ -19,8 +19,15 @@ internal sealed class CardStack : IDisposable
 {
 	internal const int MaxCards = 3;
 	internal const int StackStepDip = 140;
+	/// <summary>Потолок подкладки: дальше старейшая таки закрывается (S8.1).</summary>
+	internal const int MaxTucked = 8;
+	/// <summary>Слизняк каждой подложенной карточки над предыдущей (DIP).</summary>
+	internal const int TuckPeekDip = 6;
+	/// <summary>Высота карточки (DIP) — для позиционирования подкладки.</summary>
+	internal const int CardHeightDip = 124;
 
 	private readonly List<Entry> _cards = []; // порядок: старейшая → свежая
+	private readonly List<Entry> _tucked = []; // подкладка под плашку: старейшая → свежая (S8.1)
 	private bool _disposed;
 
 	/// <summary>Жизнь стека для панели диагностики.</summary>
@@ -29,11 +36,17 @@ internal sealed class CardStack : IDisposable
 	/// <summary>Слот освободился (любое закрытие) — догонялка докладывает следующую (S6.4).</summary>
 	internal event EventHandler? SlotFreed;
 
+	/// <summary>Подкладка изменилась — плашка обновляет счётчик (S8.1).</summary>
+	internal event EventHandler? TuckedChanged;
+
 	/// <summary>Сколько карточек на экране (Dispatcher-only).</summary>
 	internal int VisibleCount => _cards.Count;
 
 	/// <summary>Есть ли на экране догоняющие (плашка «скипнуть всё» живёт, пока есть — S6.4).</summary>
-	internal bool HasCatchUp => _cards.Exists(e => e.IsCatchUp);
+	internal bool HasCatchUp => _cards.Exists(e => e.IsCatchUp) || _tucked.Exists(e => e.IsCatchUp);
+
+	/// <summary>Сколько карточек подложено под плашку (S8.1).</summary>
+	internal int TuckedCount => _tucked.Count;
 
 	/// <summary>Закрыть все догоняющие карточки (скип: очередь уже слита, гасим и прочитанное-непрочитанное на экране).</summary>
 	internal void CloseCatchUp()
@@ -72,14 +85,37 @@ internal sealed class CardStack : IDisposable
 
 		if (_cards.Count > MaxCards)
 		{
+			// S8.1 (идея владельца): свежая всегда видна; старейшая видимая
+			// УХОДИТ ПОД ПЛАШКУ и чуть торчит — ничего не пропадает молча.
 			Entry oldest = _cards[0];
 			_cards.RemoveAt(0);
-			Detach(oldest);
-			Trace?.Invoke(this, new CardTraceEventArgs($"вытеснена id {oldest.Record.Id} (лимит {MaxCards})"));
-			oldest.Card.Dismiss();
+			_tucked.Add(oldest);
+			if (_tucked.Count > MaxTucked)
+			{
+				Entry overflow = _tucked[0];
+				_tucked.RemoveAt(0);
+				Detach(overflow);
+				Trace?.Invoke(this, new CardTraceEventArgs($"подложена и забыта id {overflow.Record.Id} (потолок {MaxTucked})"));
+				overflow.Card.Dismiss();
+			}
+
+			Trace?.Invoke(this, new CardTraceEventArgs($"подложена под плашку id {oldest.Record.Id} (всего {_tucked.Count})"));
 		}
 
 		Relayout();
+		LayoutTucked();
+		RestackZ(); // подложенная НОВЕЕ видимой — без пересборки накрывает её (грабля прогона)
+		TuckedChanged?.Invoke(this, EventArgs.Empty);
+	}
+
+	// Видимые — наверх z-полосы (подложенные остаются за ними, плашку
+	// поднимает MainWindow своим BringToFront).
+	private void RestackZ()
+	{
+		foreach (Entry entry in _cards)
+		{
+			entry.Card.BringToTop();
+		}
 	}
 
 	/// <summary>Уведомление снесено из Центра (юзером или вытеснением хранилища) — карточку погасить.</summary>
@@ -108,15 +144,75 @@ internal sealed class CardStack : IDisposable
 		}
 
 		int index = _cards.FindIndex(x => ReferenceEquals(x.Card, card));
-		if (index < 0)
+		if (index >= 0)
 		{
-			return;
+			Detach(_cards[index]);
+			_cards.RemoveAt(index);
+			Relayout();
+			SlotFreed?.Invoke(this, EventArgs.Empty);
+		}
+		else
+		{
+			// Подложенная закрылась сама (TTL/клик): вынимаем из стопки.
+			int tuckedIndex = _tucked.FindIndex(x => ReferenceEquals(x.Card, card));
+			if (tuckedIndex < 0)
+			{
+				return;
+			}
+
+			Detach(_tucked[tuckedIndex]);
+			_tucked.RemoveAt(tuckedIndex);
+			LayoutTucked();
+			TuckedChanged?.Invoke(this, EventArgs.Empty);
 		}
 
-		Detach(_cards[index]);
-		_cards.RemoveAt(index);
+		// Свободный слот — НОВЕЙШАЯ из скрытых съезжает в видимые (правка
+		// живого прогона: «закрываю 6 — должна заехать 3, не 1»: свежее
+		// релевантнее, принцип «показываем самые свежие»). Вставка в НАЧАЛО
+		// списка (она старше выживших видимых) + обязательная пересборка
+		// геометрии — без неё карточка «числится видимой» на старом месте.
+		if (_cards.Count < MaxCards && _tucked.Count > 0)
+		{
+			Entry promote = _tucked[^1];
+			_tucked.RemoveAt(_tucked.Count - 1);
+			_cards.Insert(0, promote);
+			Trace?.Invoke(this, new CardTraceEventArgs($"из подкладки наверх id {promote.Record.Id}"));
+		}
+
 		Relayout();
-		SlotFreed?.Invoke(this, EventArgs.Empty);
+		LayoutTucked();
+		RestackZ(); // повышенная должна встать ПОВЕРД оставшихся подложенных
+
+		// Событие на КАЖДОМ изменении подкладки: счётчик плашки живой
+		// (грабля прогона: после повышения счётчик подвисал).
+		TuckedChanged?.Invoke(this, EventArgs.Empty);
+	}
+
+	// Подкладка (правка живого прогона S8.1): ВСЕ скрытые в ОДНОЙ точке —
+	// слезинка над тройкой, друг за другом (сколько их — скажет плашка);
+	// ничего не уезжает вверх при докладке.
+	private void LayoutTucked()
+	{
+		double slot3Top = ScreenPicker.WorkArea().Bottom - 12 - CardHeightDip - 2 * StackStepDip;
+		foreach (Entry entry in _tucked)
+		{
+			AnimateToTop(entry.Card, slot3Top - TuckPeekDip);
+		}
+	}
+
+	/// <summary>Закрыть всё: видимые и подложенные (скип «скрыть всё», S8.1).</summary>
+	internal void CloseAll()
+	{
+		foreach (Entry entry in _cards.Concat(_tucked).ToArray())
+		{
+			Detach(entry);
+			entry.Card.Dismiss();
+		}
+
+		_cards.Clear();
+		_tucked.Clear();
+		Relayout();
+		TuckedChanged?.Invoke(this, EventArgs.Empty);
 	}
 
 	private void OnFocusRequested(CardWindow card)
@@ -140,8 +236,14 @@ internal sealed class CardStack : IDisposable
 	// ошибку. При рывках на layered-окнах — деградация до мгновенного Top.
 	private static void AnimateTo(CardWindow card, int offsetDip)
 	{
-		double from = card.Top;
 		double target = ScreenPicker.WorkArea().Bottom - card.Height - 12 - offsetDip;
+		AnimateToTop(card, target);
+	}
+
+	// Абсолютный Top (подкладка позиционируется от плашки, не от низа зоны).
+	private static void AnimateToTop(CardWindow card, double target)
+	{
+		double from = card.Top;
 		if (Math.Abs(target - from) < 0.5)
 		{
 			return;
