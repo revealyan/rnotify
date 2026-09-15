@@ -57,6 +57,9 @@
   <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
   <data name="TrayMenuPanel" xml:space="preserve"><value>Панель</value></data>
   <data name="TrayMenuAutostart" xml:space="preserve"><value>Автозапуск</value></data>
+  <data name="CatchUpRemainingOne" xml:space="preserve"><value>осталось догоняющее уведомление</value></data>
+  <data name="CatchUpRemainingMany" xml:space="preserve"><value>осталось догоняющих: {0}</value></data>
+  <data name="SkipCatchUp" xml:space="preserve"><value>Пропустить догоняющие</value></data>
   <data name="TrayMenuExit" xml:space="preserve"><value>Выход</value></data>
   <data name="PanelHeader" xml:space="preserve"><value>Идентичность пакета</value></data>
   <data name="CopyAll" xml:space="preserve"><value>Скопировать всё</value></data>

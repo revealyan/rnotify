@@ -42,6 +42,15 @@ public static class Strings
 	/// <summary>Меню трея: автозапуск.</summary>
 	public static string TrayMenuAutostart => Get("TrayMenuAutostart", "Autostart");
 
+	/// <summary>Плашка догоняющих: осталось одно.</summary>
+	public static string CatchUpRemainingOne => Get("CatchUpRemainingOne", "catch-up notification left");
+
+	/// <summary>Плашка догоняющих: осталось много ({0}).</summary>
+	public static string CatchUpRemainingMany => Get("CatchUpRemainingMany", "catch-up notifications left: {0}");
+
+	/// <summary>Меню трея: пропустить поток догоняющих.</summary>
+	public static string SkipCatchUp => Get("SkipCatchUp", "Skip catch-up");
+
 	/// <summary>Меню трея: выход.</summary>
 	public static string TrayMenuExit => Get("TrayMenuExit", "Exit");
 

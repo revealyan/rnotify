@@ -13,4 +13,11 @@ namespace rnotify.Core.Settings;
 /// <param name="SuppressWithoutListener">Применять формулу Э1 при отказе/таймауте consent листенера.</param>
 /// <param name="Autostart">Запускаться с системой (StartupTask; чекбокс трея).</param>
 /// <param name="Language">Язык UI: "ru" | "en" | null — язык ОС.</param>
-public sealed record AppSettings(bool SuppressWithoutListener = false, bool Autostart = false, string? Language = null);
+/// <param name="CatchUpLimit">S6.4: сколько догоняющих карточек показать при старте (0 — не догонять); остальное молча в floor.</param>
+/// <param name="CatchUpSticky">S6.4: догоняющие без TTL — читает юзер, закрывает юзер; подача по свободным слотам стека.</param>
+public sealed record AppSettings(
+	bool SuppressWithoutListener = false,
+	bool Autostart = false,
+	string? Language = null,
+	int CatchUpLimit = 25,
+	bool CatchUpSticky = true);

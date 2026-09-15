@@ -18,6 +18,7 @@ internal sealed class TrayIcon : IDisposable
 	private const uint _idTray = 1;
 	private const uint _menuPanel = 100;
 	private const uint _menuAutostart = 101;
+	private const uint _menuSkipCatchUp = 103;
 	private const uint _menuExit = 102;
 
 	private HwndSource? _source;
@@ -33,6 +34,9 @@ internal sealed class TrayIcon : IDisposable
 
 	/// <summary>Меню «Автозапуск» — переключить (S6.1/2: settings.json + StartupTask).</summary>
 	internal event EventHandler? AutostartToggled;
+
+	/// <summary>Меню «Пропустить догоняющие» — слить очередь догонялок в floor молча (S6.4).</summary>
+	internal event EventHandler? SkipCatchUpRequested;
 
 	/// <summary>Галочка «Автозапуск» на момент открытия меню (коммит 2).</summary>
 	internal bool AutostartChecked { get; set; }
@@ -128,6 +132,7 @@ internal sealed class TrayIcon : IDisposable
 			_ = AppendMenuW(menu, _mfString, _menuPanel, Strings.TrayMenuPanel);
 			_ = AppendMenuW(menu, _mfString | (AutostartChecked ? _mfChecked : 0), _menuAutostart, Strings.TrayMenuAutostart);
 			_ = AppendMenuW(menu, _mfSeparator, 0, "");
+			_ = AppendMenuW(menu, _mfString, _menuSkipCatchUp, Strings.SkipCatchUp);
 			_ = AppendMenuW(menu, _mfString, _menuExit, Strings.TrayMenuExit);
 
 			_ = GetCursorPos(out POINT pt);
@@ -144,6 +149,9 @@ internal sealed class TrayIcon : IDisposable
 					break;
 				case _menuAutostart:
 					AutostartToggled?.Invoke(this, EventArgs.Empty);
+					break;
+				case _menuSkipCatchUp:
+					SkipCatchUpRequested?.Invoke(this, EventArgs.Empty);
 					break;
 				case _menuExit:
 					ExitRequested?.Invoke(this, EventArgs.Empty);
