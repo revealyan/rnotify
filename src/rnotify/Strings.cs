@@ -115,6 +115,34 @@ public static class Strings
 	/// <summary>История: Body.</summary>
 	public static string HistoryCopyBody => Get("HistoryCopyBody", "Body");
 
+
+	/// <summary>Редактор правил: Rules….</summary>
+	public static string TrayMenuRules => Get("TrayMenuRules", "Rules…");
+	/// <summary>Редактор правил: RNotify — rules.</summary>
+	public static string RulesTitle => Get("RulesTitle", "RNotify — rules");
+	/// <summary>Редактор правил: + group.</summary>
+	public static string RulesAddGroup => Get("RulesAddGroup", "+ group");
+	/// <summary>Редактор правил: − group.</summary>
+	public static string RulesRemoveGroup => Get("RulesRemoveGroup", "− group");
+	/// <summary>Редактор правил: + rule.</summary>
+	public static string RulesAddRule => Get("RulesAddRule", "+ rule");
+	/// <summary>Редактор правил: − rule.</summary>
+	public static string RulesRemoveRule => Get("RulesRemoveRule", "− rule");
+	/// <summary>Редактор правил: Save.</summary>
+	public static string RulesSave => Get("RulesSave", "Save");
+	/// <summary>Редактор правил: Cancel.</summary>
+	public static string RulesCancel => Get("RulesCancel", "Cancel");
+	/// <summary>Редактор правил: saved — engine reloaded.</summary>
+	public static string RulesSaved => Get("RulesSaved", "saved — engine reloaded");
+	/// <summary>Редактор правил: on.</summary>
+	public static string RulesGroupEnabled => Get("RulesGroupEnabled", "on");
+	/// <summary>Редактор правил: (no group).</summary>
+	public static string RulesNoGroup => Get("RulesNoGroup", "(no group)");
+	/// <summary>Редактор правил: (no rule).</summary>
+	public static string RulesNoRule => Get("RulesNoRule", "(no rule)");
+	/// <summary>Редактор правил: (default: regex).</summary>
+	public static string RulesMatchAuto => Get("RulesMatchAuto", "(default: regex)");
+
 	/// <summary>Ключ строки: автозапуск.</summary>
 	public static string RowAutostart => Get("RowAutostart", "Autostart");
 }

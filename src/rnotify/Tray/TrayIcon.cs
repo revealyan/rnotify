@@ -18,7 +18,9 @@ internal sealed class TrayIcon : IDisposable
 	private const uint _idTray = 1;
 	private const uint _menuPanel = 100;
 	private const uint _menuHistory = 104;
+	private const uint _menuRules = 105;
 	private const int _hotkeyId = 1;
+	private const int _rulesHotkeyId = 2;
 	private const uint _menuAutostart = 101;
 	private const uint _menuSkipCatchUp = 103;
 	private const uint _menuExit = 102;
@@ -45,6 +47,12 @@ internal sealed class TrayIcon : IDisposable
 
 	/// <summary>Меню «История…» — открыть панель истории.</summary>
 	internal event EventHandler? HistoryMenuRequested;
+
+	/// <summary>Хоткей редактора правил (S7.3).</summary>
+	internal event EventHandler? RulesHotkeyPressed;
+
+	/// <summary>Меню «Правила…» — открыть редактор правил.</summary>
+	internal event EventHandler? RulesMenuRequested;
 
 	/// <summary>Галочка «Автозапуск» на момент открытия меню (коммит 2).</summary>
 	internal bool AutostartChecked { get; set; }
@@ -77,6 +85,17 @@ internal sealed class TrayIcon : IDisposable
 		}
 
 		_added = true;
+	}
+
+	/// <summary>Хоткей редактора правил — тот же механизм, другой id.</summary>
+	internal bool TryRegisterRulesHotkey(string? spec)
+	{
+		if (_source is null || !TryParseHotkey(spec, out uint modifiers, out uint vk))
+		{
+			return false;
+		}
+
+		return RegisterHotKey(_source.Handle, _rulesHotkeyId, modifiers, vk);
 	}
 
 	/// <summary>
@@ -159,9 +178,17 @@ internal sealed class TrayIcon : IDisposable
 			return IntPtr.Zero;
 		}
 
-		if (msg == _wmHotkey && wParam.ToInt32() == _hotkeyId)
+		if (msg == _wmHotkey)
 		{
-			HistoryHotkeyPressed?.Invoke(this, EventArgs.Empty);
+			if (wParam.ToInt32() == _hotkeyId)
+			{
+				HistoryHotkeyPressed?.Invoke(this, EventArgs.Empty);
+			}
+			else if (wParam.ToInt32() == _rulesHotkeyId)
+			{
+				RulesHotkeyPressed?.Invoke(this, EventArgs.Empty);
+			}
+
 			handled = true;
 			return IntPtr.Zero;
 		}
@@ -198,6 +225,7 @@ internal sealed class TrayIcon : IDisposable
 		{
 			_ = AppendMenuW(menu, _mfString, _menuPanel, Strings.TrayMenuPanel);
 			_ = AppendMenuW(menu, _mfString, _menuHistory, Strings.TrayMenuHistory);
+			_ = AppendMenuW(menu, _mfString, _menuRules, Strings.TrayMenuRules);
 			_ = AppendMenuW(menu, _mfString | (AutostartChecked ? _mfChecked : 0), _menuAutostart, Strings.TrayMenuAutostart);
 			_ = AppendMenuW(menu, _mfSeparator, 0, "");
 			_ = AppendMenuW(menu, _mfString, _menuSkipCatchUp, Strings.SkipCatchUp);
@@ -217,6 +245,9 @@ internal sealed class TrayIcon : IDisposable
 					break;
 				case _menuHistory:
 					HistoryMenuRequested?.Invoke(this, EventArgs.Empty);
+					break;
+				case _menuRules:
+					RulesMenuRequested?.Invoke(this, EventArgs.Empty);
 					break;
 				case _menuAutostart:
 					AutostartToggled?.Invoke(this, EventArgs.Empty);
@@ -257,6 +288,7 @@ internal sealed class TrayIcon : IDisposable
 		if (_source is not null)
 		{
 			_ = UnregisterHotKey(_source.Handle, _hotkeyId);
+			_ = UnregisterHotKey(_source.Handle, _rulesHotkeyId);
 		}
 
 		if (_icon != IntPtr.Zero)

@@ -85,4 +85,17 @@
   <data name="HistoryCopySender" xml:space="preserve"><value>Отправитель</value></data>
   <data name="HistoryCopyTitle" xml:space="preserve"><value>Заголовок</value></data>
   <data name="HistoryCopyBody" xml:space="preserve"><value>Тело</value></data>
+  <data name="TrayMenuRules" xml:space="preserve"><value>Правила…</value></data>
+  <data name="RulesTitle" xml:space="preserve"><value>RNotify — правила</value></data>
+  <data name="RulesAddGroup" xml:space="preserve"><value>+ группа</value></data>
+  <data name="RulesRemoveGroup" xml:space="preserve"><value>− группа</value></data>
+  <data name="RulesAddRule" xml:space="preserve"><value>+ правило</value></data>
+  <data name="RulesRemoveRule" xml:space="preserve"><value>− правило</value></data>
+  <data name="RulesSave" xml:space="preserve"><value>Сохранить</value></data>
+  <data name="RulesCancel" xml:space="preserve"><value>Отмена</value></data>
+  <data name="RulesSaved" xml:space="preserve"><value>сохранено — движок перезагружен</value></data>
+  <data name="RulesGroupEnabled" xml:space="preserve"><value>вкл</value></data>
+  <data name="RulesNoGroup" xml:space="preserve"><value>(нет группы)</value></data>
+  <data name="RulesNoRule" xml:space="preserve"><value>(нет правила)</value></data>
+  <data name="RulesMatchAuto" xml:space="preserve"><value>(дефолт: regex)</value></data>
 </root>

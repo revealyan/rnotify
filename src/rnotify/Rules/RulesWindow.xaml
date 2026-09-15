@@ -1,0 +1,68 @@
+<Window x:Class="rnotify.Rules.RulesWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="RNotify — правила" Width="860" Height="560"
+        WindowStartupLocation="CenterScreen" ShowInTaskbar="False"
+        KeyDown="OnWindowKeyDown">
+    <!-- S7.3: редактор rules.json. Слева группы (вкл/имя/цвет), справа правила
+         выбранной группы (матчёры, режим, действие, ttl, killNative, click).
+         Сохранение — RulesStore.Save (атомарно) → хот-релоад подхватывает;
+         движок парсит файл заново, кривое значение = выбраковка правила со
+         строкой в панели (доктрина S3.1), редактор не дублирует валидацию. -->
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="240" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <DockPanel Grid.Column="0" Margin="0,0,10,0">
+                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
+                    <Button Click="OnAddGroup" Padding="8,2" x:Name="AddGroupButton" />
+                    <Button Click="OnRemoveGroup" Padding="8,2" Margin="8,0,0,0" x:Name="RemoveGroupButton" />
+                </StackPanel>
+                <ListBox x:Name="GroupsList" SelectionChanged="OnGroupSelected"
+                         HorizontalContentAlignment="Stretch">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Margin="2">
+                                <DockPanel>
+                                    <CheckBox IsChecked="{Binding Enabled, Mode=TwoWay, TargetNullValue=true}"
+                                              DockPanel.Dock="Right" ToolTip="on/off" />
+                                    <TextBox Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontWeight="SemiBold" />
+                                </DockPanel>
+                                <DockPanel Margin="0,4,0,0">
+                                    <Border DockPanel.Dock="Right" Width="18" Height="14" CornerRadius="2"
+                                            BorderBrush="#66FFFFFF" BorderThickness="1">
+                                        <Border.Background>
+                                            <SolidColorBrush Color="{Binding ColorBrush}" />
+                                        </Border.Background>
+                                    </Border>
+                                    <TextBox Text="{Binding Color, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                             FontFamily="Consolas" FontSize="11" />
+                                </DockPanel>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+            <DockPanel Grid.Column="1">
+                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
+                    <Button Click="OnAddRule" Padding="8,2" x:Name="AddRuleButton" />
+                    <Button Click="OnRemoveRule" Padding="8,2" Margin="8,0,0,0" x:Name="RemoveRuleButton" />
+                </StackPanel>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel x:Name="RulesPanel" />
+                </ScrollViewer>
+            </DockPanel>
+        </Grid>
+        <DockPanel Grid.Row="1" Margin="0,10,0,0">
+            <TextBlock x:Name="StatusText" Foreground="#8A8A8A" FontSize="11" VerticalAlignment="Center" />
+            <Button DockPanel.Dock="Right" Click="OnSave" Padding="16,4" MinWidth="110" x:Name="SaveButton" />
+            <Button DockPanel.Dock="Right" Click="OnCancel" Padding="12,4" Margin="0,0,8,0" x:Name="CancelButton" />
+        </DockPanel>
+    </Grid>
+</Window>
