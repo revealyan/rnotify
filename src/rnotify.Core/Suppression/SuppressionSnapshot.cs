@@ -7,6 +7,8 @@ namespace rnotify.Core.Suppression;
 /// </summary>
 /// <param name="GlobalToastsEnabled">Прежний NOC_GLOBAL_SETTING_TOASTS_ENABLED в корне куста.</param>
 /// <param name="AppShowBanner">Прежние ShowBanner по AUMID (включая дозаписанных blanket'ом на лету).</param>
+/// <param name="AppSoundFile">Прежние SoundFile по AUMID (S8.1: звуковой blanket; null — не было, "" — юзер сам заглушил).</param>
 public sealed record SuppressionSnapshot(
 	int? GlobalToastsEnabled,
-	IReadOnlyDictionary<string, int?> AppShowBanner);
+	IReadOnlyDictionary<string, int?> AppShowBanner,
+	IReadOnlyDictionary<string, string?> AppSoundFile);

@@ -145,7 +145,7 @@ public partial class MainWindow : Window
 	{
 		// Супрессор — всегда (S6.4): починка маркера краха обязана случиться и
 		// без применения формулы, иначе баннеры юзера останутся погашенными.
-		_suppressor = new NativeBannerSuppressor(new RegistryNotificationSettings());
+		_suppressor = new NativeBannerSuppressor(new RegistryNotificationSettings(), soundBlanket: _settings.SuppressNativeSound);
 		_suppressor.Trace += OnSuppressionTrace;
 
 		if (consent != NotificationAccessStatus.Allowed && !_settings.SuppressWithoutListener)
@@ -408,7 +408,17 @@ public partial class MainWindow : Window
 			AddRow($"+ id {id}", text);
 			if (verdict.Action == RuleAction.Show)
 			{
-				_stack?.Show(record, verdict, senderInfo, isCatchUp);
+				if (verdict.HideOnFullscreen && FullscreenProbe.IsForegroundFullscreen())
+				{
+					// Правило просит не вылезать в играх/презентациях: карточки
+					// нет, уведомление живёт в истории/Центре (S8.1).
+					AddRow($"~ id {id}", "скрыта: фуллскрин (hideOnFullscreen)");
+				}
+				else
+				{
+					RuleSound.Play(verdict.Sound);
+					_stack?.Show(record, verdict, senderInfo, isCatchUp);
+				}
 			}
 		});
 		// Новый отправитель — blanket ShowBanner=0 (Э1): супрессор под локом;

@@ -178,7 +178,9 @@ public sealed class RulesEngine
 			group.Color,
 			rule.KillNative ?? false,
 			rule.OverFullscreen ?? false,
-			click.Value);
+			click.Value,
+			Sound: rule.Sound,
+			HideOnFullscreen: rule.HideOnFullscreen ?? false);
 		reason = null;
 		return new CompiledRule(app, title, body, verdict);
 	}

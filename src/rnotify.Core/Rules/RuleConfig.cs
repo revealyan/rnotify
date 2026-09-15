@@ -31,8 +31,14 @@ public sealed class RuleConfig
 	/// <summary>Снести нативную копию из Центра при матче (лечение reminder-утечек).</summary>
 	public bool? KillNative { get; set; }
 
-	/// <summary>Показывать поверх фуллскрина (применяет рендер Э4).</summary>
+	/// <summary>Показывать поверх фуллскрина — УСТАРЕЛО (карточки и так всегда поверх; поле читается, игнорируется).</summary>
 	public bool? OverFullscreen { get; set; }
+
+	/// <summary>Скрывать карточку при фуллскрине foreground-окна (S8.1: игра/презентация — не вылезать).</summary>
+	public bool? HideOnFullscreen { get; set; }
+
+	/// <summary>Звук при показе своей карточки: путь к .wav; отсутствует = тишина (S8.1, архитектура §9).</summary>
+	public string? Sound { get; set; }
 
 	/// <summary>Клик по карточке: close | focus (дефолт close).</summary>
 	public string? Click { get; set; }

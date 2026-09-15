@@ -31,4 +31,10 @@ public interface INotificationSettingsRegistry
 
 	/// <summary>Удалить значение у отправителя; отсутствующее — тихо.</summary>
 	public void DeleteSenderValue(string senderKey, string valueName);
+
+	/// <summary>Строковое значение у отправителя (SoundFile); null — нет.</summary>
+	public string? GetSenderString(string senderKey, string valueName);
+
+	/// <summary>Записать строковое значение отправителю.</summary>
+	public void SetSenderString(string senderKey, string valueName, string value);
 }

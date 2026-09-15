@@ -25,6 +25,9 @@ public sealed class NativeBannerSuppressor : IDisposable
 	/// <summary>Per-app тумблер баннеров в подключе отправителя.</summary>
 	public const string ShowBannerName = "ShowBanner";
 
+	/// <summary>Per-app звук тоста: "" = тишина (доказано живьём S8.1, канон §3).</summary>
+	public const string SoundFileName = "SoundFile";
+
 	private static readonly JsonSerializerOptions _jsonOptions = new()
 	{
 		PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -33,6 +36,7 @@ public sealed class NativeBannerSuppressor : IDisposable
 
 	private readonly INotificationSettingsRegistry _registry;
 	private readonly string _markerPath;
+	private readonly bool _soundBlanket;
 	private readonly Lock _gate = new();
 	private SuppressionSnapshot? _applied; // под _gate: активное подавление (null — не применяли/сняли)
 	private HashSet<string> _blanketed = []; // под _gate: кому уже написан ShowBanner=0
@@ -54,10 +58,11 @@ public sealed class NativeBannerSuppressor : IDisposable
 	/// <summary>Создаёт супрессор поверх шва реестра.</summary>
 	/// <param name="registry">Шов (прод — HKCU, тесты — фейк).</param>
 	/// <param name="markerPath">Путь маркера-снапшота; null — <see cref="DefaultMarkerPath"/> (тесты подставляют временный).</param>
-	public NativeBannerSuppressor(INotificationSettingsRegistry registry, string? markerPath = null)
+	public NativeBannerSuppressor(INotificationSettingsRegistry registry, string? markerPath = null, bool soundBlanket = true)
 	{
 		_registry = registry;
 		_markerPath = markerPath ?? DefaultMarkerPath;
+		_soundBlanket = soundBlanket;
 	}
 
 	/// <summary>
@@ -89,18 +94,7 @@ public sealed class NativeBannerSuppressor : IDisposable
 			}
 
 			IReadOnlyList<string> senders = _registry.GetSenderKeys();
-			Dictionary<string, int?> priors = [];
-			foreach (string aumid in senders)
-			{
-				// Приор из маркера краха — истина (в реестре сейчас наши нули);
-				// нового отправителя читаем как есть (появился после краха —
-				// его «до нас» могло быть только отсутствие значения).
-				priors[aumid] = stale is not null && stale.AppShowBanner.TryGetValue(aumid, out int? prior)
-					? prior
-					: _registry.GetSenderDword(aumid, ShowBannerName);
-			}
-
-			SuppressionSnapshot snapshot = new(stale?.GlobalToastsEnabled ?? _registry.GetRootDword(GlobalToastsEnabledName), priors);
+			SuppressionSnapshot snapshot = BuildSnapshot(senders, stale);
 
 			// Маркер ДО записей: крах посреди blanket оставит репею прежние значения.
 			WriteMarker(snapshot);
@@ -110,6 +104,12 @@ public sealed class NativeBannerSuppressor : IDisposable
 				foreach (string aumid in senders)
 				{
 					_registry.SetSenderDword(aumid, ShowBannerName, 0);
+					if (_soundBlanket)
+					{
+						// S8.1: родной дзыньк тоста живёт при погашенных баннерах
+						// (факт живого прогона) — гасим пустой строкой всем.
+						_registry.SetSenderString(aumid, SoundFileName, string.Empty);
+					}
 				}
 			}
 			catch (Exception)
@@ -155,9 +155,17 @@ public sealed class NativeBannerSuppressor : IDisposable
 				{
 					[aumid] = prior,
 				};
-				SuppressionSnapshot updated = _applied with { AppShowBanner = extended };
+				Dictionary<string, string?> extendedSound = new(_applied.AppSoundFile, StringComparer.Ordinal)
+				{
+					[aumid] = _soundBlanket ? _registry.GetSenderString(aumid, SoundFileName) : null,
+				};
+				SuppressionSnapshot updated = _applied with { AppShowBanner = extended, AppSoundFile = extendedSound };
 				WriteMarker(updated);
 				_registry.SetSenderDword(aumid, ShowBannerName, 0);
+				if (_soundBlanket)
+				{
+					_registry.SetSenderString(aumid, SoundFileName, string.Empty);
+				}
 				_applied = updated;
 				_blanketed.Add(aumid);
 				Trace?.Invoke(this, new SuppressionTraceEventArgs($"Э1: новый отправитель {DescribeSender(aumid)} (ShowBanner=0)"));
@@ -217,6 +225,26 @@ public sealed class NativeBannerSuppressor : IDisposable
 		}
 	}
 
+	// Снимок «до нас»: приор из маркера краха — истина (в реестре наши нули);
+	// нового после краха отправителя читаем как есть.
+	private SuppressionSnapshot BuildSnapshot(IReadOnlyList<string> senders, SuppressionSnapshot? stale)
+	{
+		Dictionary<string, int?> priors = [];
+		Dictionary<string, string?> soundPriors = [];
+		foreach (string aumid in senders)
+		{
+			priors[aumid] = stale is not null && stale.AppShowBanner.TryGetValue(aumid, out int? prior)
+				? prior
+				: _registry.GetSenderDword(aumid, ShowBannerName);
+			soundPriors[aumid] = _soundBlanket ? _registry.GetSenderString(aumid, SoundFileName) : null;
+		}
+
+		return new SuppressionSnapshot(
+			stale?.GlobalToastsEnabled ?? _registry.GetRootDword(GlobalToastsEnabledName),
+			priors,
+			soundPriors);
+	}
+
 	/// <summary>
 	/// S6.4: чинит реестр по маркеру БЕЗ применения формулы — consent-ветка
 	/// тоже обязана вернуть юзеру баннеры. Idempotent; неудача наружу
@@ -268,6 +296,18 @@ public sealed class NativeBannerSuppressor : IDisposable
 			else
 			{
 				_registry.DeleteSenderValue(prior.Key, ShowBannerName);
+			}
+		}
+
+		foreach (KeyValuePair<string, string?> prior in snapshot.AppSoundFile)
+		{
+			if (prior.Value is string sound)
+			{
+				_registry.SetSenderString(prior.Key, SoundFileName, sound);
+			}
+			else
+			{
+				_registry.DeleteSenderValue(prior.Key, SoundFileName);
 			}
 		}
 	}

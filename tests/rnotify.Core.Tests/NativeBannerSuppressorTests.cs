@@ -94,6 +94,39 @@ public sealed class NativeBannerSuppressorTests : IDisposable
 	}
 
 	[Fact]
+	public void Звуковой_бланкет_гасит_и_возвращается()
+	{
+		FakeNotificationSettings registry = new();
+		registry.SeedSender("app.a", 1);
+		registry.SeedSenderString("app.a", NativeBannerSuppressor.SoundFileName, @"C:\my.wav"); // юзер имел свой звук
+		registry.SeedSender("app.b", null); // звука не было
+		using NativeBannerSuppressor suppressor = new(registry, MarkerPath);
+
+		suppressor.Apply();
+
+		// S8.1: родной дзыньк гасится пустой строкой всем отправителям.
+		Assert.Equal(string.Empty, registry.GetSenderString("app.a", NativeBannerSuppressor.SoundFileName));
+		Assert.Equal(string.Empty, registry.GetSenderString("app.b", NativeBannerSuppressor.SoundFileName));
+
+		suppressor.Restore();
+
+		Assert.Equal(@"C:\my.wav", registry.GetSenderString("app.a", NativeBannerSuppressor.SoundFileName)); // юзеру вернули его
+		Assert.Null(registry.GetSenderString("app.b", NativeBannerSuppressor.SoundFileName)); // не было — не осталось
+	}
+
+	[Fact]
+	public void Звуковой_бланкет_выключен_настройкой()
+	{
+		FakeNotificationSettings registry = new();
+		registry.SeedSender("app.a", 1);
+		using NativeBannerSuppressor suppressor = new(registry, MarkerPath, soundBlanket: false);
+
+		suppressor.Apply();
+
+		Assert.Null(registry.GetSenderString("app.a", NativeBannerSuppressor.SoundFileName)); // не трогали
+	}
+
+	[Fact]
 	public void Apply_повторно_тихо_без_новых_записей()
 	{
 		FakeNotificationSettings registry = new();
