@@ -141,7 +141,7 @@ internal sealed class CardStack : IDisposable
 	private static void AnimateTo(CardWindow card, int offsetDip)
 	{
 		double from = card.Top;
-		double target = SystemParameters.WorkArea.Bottom - card.Height - 12 - offsetDip;
+		double target = ScreenPicker.WorkArea().Bottom - card.Height - 12 - offsetDip;
 		if (Math.Abs(target - from) < 0.5)
 		{
 			return;

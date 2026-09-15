@@ -15,9 +15,11 @@ namespace rnotify.Core.Settings;
 /// <param name="Language">Язык UI: "ru" | "en" | null — язык ОС.</param>
 /// <param name="CatchUpLimit">S6.4: сколько догоняющих карточек показать при старте (0 — не догонять); остальное молча в floor.</param>
 /// <param name="CatchUpSticky">S6.4: догоняющие без TTL — читает юзер, закрывает юзер; подача по свободным слотам стека.</param>
+/// <param name="CardScreen">S7.1: экран зоны карточек: "cursor" (где мышь, дефолт) | "primary" | "active" (переднее окно).</param>
 public sealed record AppSettings(
 	bool SuppressWithoutListener = false,
 	bool Autostart = false,
 	string? Language = null,
 	int CatchUpLimit = 25,
-	bool CatchUpSticky = true);
+	bool CatchUpSticky = true,
+	string? CardScreen = null);

@@ -140,23 +140,28 @@ public partial class MainWindow : Window
 		// без применения формулы, иначе баннеры юзера останутся погашенными.
 		_suppressor = new NativeBannerSuppressor(new RegistryNotificationSettings());
 		_suppressor.Trace += OnSuppressionTrace;
-		try
-		{
-			_suppressor.TryRepairMarker();
-		}
-		catch (Exception ex)
-		{
-			AddRow("Э1", $"починка маркера не удалась: {ex.Message} — маркер оставлен, следующий старт попробует снова");
-		}
 
 		if (consent != NotificationAccessStatus.Allowed && !_settings.SuppressWithoutListener)
 		{
 			AddRow("Э1", $"consent {consent} — нативные баннеры не гасим");
+			try
+			{
+				_suppressor.TryRepairMarker(); // без применения: вернуть юзеру баннеры
+			}
+			catch (Exception ex)
+			{
+				AddRow("Э1", $"починка маркера не удалась: {ex.Message} — маркер оставлен, следующий старт попробует снова");
+			}
+
 			return;
 		}
 
 		try
 		{
+			// ГОНКА (живой прогон S7.1): отдельный TryRepairMarker ДО Apply
+			// на секунду включал баннеры (ремонт global=1), фид уже слушал —
+			// тост в зазоре давал карточку И нативный баннер. Теперь ремонт
+			// живёт ВНУТРИ Apply одним локом: зазор — микросекунды.
 			_suppressor.Apply();
 		}
 		catch (Exception ex)
@@ -173,7 +178,9 @@ public partial class MainWindow : Window
 		_settingsStore = new AppSettingsStore();
 		AppSettingsLoadResult load = _settingsStore.LoadOrDefault();
 		_settings = load.Settings;
-		string values = $"suppressWithoutListener={_settings.SuppressWithoutListener}, autostart={_settings.Autostart}";
+		ScreenPicker.Mode = _settings.CardScreen; // экран зоны карточек (S7.1)
+		string values = $"suppressWithoutListener={_settings.SuppressWithoutListener}, autostart={_settings.Autostart}"
+			+ $", screen={_settings.CardScreen ?? "cursor"}";
 		AddRow(Strings.RowSettings, load.Error is { } error ? $"ошибка: {error.Message} — дефолт {values}" : $"{_settingsStore.FilePath}: {values}");
 	}
 

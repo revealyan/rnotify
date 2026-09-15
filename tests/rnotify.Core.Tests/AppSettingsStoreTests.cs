@@ -86,13 +86,14 @@ public sealed class AppSettingsStoreTests
 		AppSettingsStore store = new(path);
 		_ = store.LoadOrDefault(); // файл создан дефолтным
 
-		store.Save(new AppSettings(SuppressWithoutListener: true, Autostart: true, Language: "ru"));
+		store.Save(new AppSettings(SuppressWithoutListener: true, Autostart: true, Language: "ru", CardScreen: "active"));
 
 		AppSettingsLoadResult reread = store.LoadOrDefault();
 		Assert.Null(reread.Error);
 		Assert.True(reread.Settings.SuppressWithoutListener);
 		Assert.True(reread.Settings.Autostart);
 		Assert.Equal("ru", reread.Settings.Language); // S6.2: язык UI round-trip
+		Assert.Equal("active", reread.Settings.CardScreen); // S7.1: экран round-trip
 		Assert.False(File.Exists(path + ".tmp")); // атомарно: tmp-мусора не остаётся
 	}
 }

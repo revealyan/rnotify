@@ -32,15 +32,16 @@ public partial class CatchUpBanner : Window
 
 	private void OnSkipClick(object sender, RoutedEventArgs e) => SkipRequested?.Invoke(this, EventArgs.Empty);
 
-	// Та же механика зоны, что у карточки: правый-низ WorkArea.
+	// Та же механика зоны, что у карточки: правый-низ WorkArea выбранного экрана.
 	private void OnLoaded(object sender, RoutedEventArgs e)
 	{
-		Left = SystemParameters.WorkArea.Right - Width - 12;
+		Rect area = ScreenPicker.WorkArea();
+		Left = area.Right - Width - 12;
 		MoveAbove(3); // стартовая позиция — под полную тройку, дальше ездит со стеком
 	}
 
 	/// <summary>Ездит со стеком: прижата к верхней карточке (её верх − зазор 16).</summary>
-	internal void MoveAbove(int stackCount) => Top = SystemParameters.WorkArea.Bottom - Height - 12
+	internal void MoveAbove(int stackCount) => Top = ScreenPicker.WorkArea().Bottom - Height - 12
 		- (124 + Math.Max(0, stackCount - 1) * 140 + 16);
 
 	protected override void OnSourceInitialized(EventArgs e)
