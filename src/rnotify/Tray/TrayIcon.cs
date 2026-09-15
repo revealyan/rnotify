@@ -17,6 +17,8 @@ internal sealed class TrayIcon : IDisposable
 	private const uint _callbackMessage = 0x8000 + 0x49; // WM_APP + 0x49
 	private const uint _idTray = 1;
 	private const uint _menuPanel = 100;
+	private const uint _menuHistory = 104;
+	private const int _hotkeyId = 1;
 	private const uint _menuAutostart = 101;
 	private const uint _menuSkipCatchUp = 103;
 	private const uint _menuExit = 102;
@@ -37,6 +39,12 @@ internal sealed class TrayIcon : IDisposable
 
 	/// <summary>Меню «Пропустить догоняющие» — слить очередь догонялок в floor молча (S6.4).</summary>
 	internal event EventHandler? SkipCatchUpRequested;
+
+	/// <summary>Хоткей истории сработал (S7.2) — открыть/поднять панель истории.</summary>
+	internal event EventHandler? HistoryHotkeyPressed;
+
+	/// <summary>Меню «История…» — открыть панель истории.</summary>
+	internal event EventHandler? HistoryMenuRequested;
 
 	/// <summary>Галочка «Автозапуск» на момент открытия меню (коммит 2).</summary>
 	internal bool AutostartChecked { get; set; }
@@ -71,6 +79,58 @@ internal sealed class TrayIcon : IDisposable
 		_added = true;
 	}
 
+	/// <summary>
+	/// Зарегистрировать глобальный хоткей вида "Win+Shift+N" на окно трея
+	/// (WM_HOTKEY придёт в WndProc). false — комбинация занята/не разобрана
+	/// (вызывающий скажет строкой; путь без хоткея — меню трея).
+	/// </summary>
+	internal bool TryRegisterHotkey(string? spec)
+	{
+		if (_source is null || !TryParseHotkey(spec, out uint modifiers, out uint vk))
+		{
+			return false;
+		}
+
+		return RegisterHotKey(_source.Handle, _hotkeyId, modifiers, vk);
+	}
+
+	// "Win+Shift+N" → MOD-набор + виртуальная клавиша; мусор — false.
+	private static bool TryParseHotkey(string? spec, out uint modifiers, out uint vk)
+	{
+		modifiers = 0;
+		vk = 0;
+		if (string.IsNullOrWhiteSpace(spec))
+		{
+			return false;
+		}
+
+		string[] parts = spec.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+		if (parts.Length < 2)
+		{
+			return false;
+		}
+
+		foreach (string part in parts[..^1])
+		{
+			switch (part.ToUpperInvariant())
+			{
+				case "WIN": modifiers |= 0x8; break;
+				case "CTRL":
+				case "CONTROL": modifiers |= 0x2; break;
+				case "ALT": modifiers |= 0x1; break;
+				case "SHIFT": modifiers |= 0x4; break;
+				default: return false;
+			}
+		}
+
+		string key = parts[^1].ToUpperInvariant();
+		vk = key.Length == 1 && key[0] >= 'A' && key[0] <= 'Z' ? key[0]
+			: key.Length == 1 && key[0] >= '0' && key[0] <= '9' ? key[0]
+			: key.StartsWith('F') && int.TryParse(key[1..], System.Globalization.CultureInfo.InvariantCulture, out int fn) && fn is >= 1 and <= 12 ? (uint)(0x70 + fn - 1)
+			: 0;
+		return vk != 0;
+	}
+
 	/// <summary>Создаёт иконку с окном-приёмником сообщений.</summary>
 	internal static TrayIcon Create()
 	{
@@ -95,6 +155,13 @@ internal sealed class TrayIcon : IDisposable
 		// иконка осиротеет) — глотаем, демон управляется только через меню.
 		if (msg == _wmClose)
 		{
+			handled = true;
+			return IntPtr.Zero;
+		}
+
+		if (msg == _wmHotkey && wParam.ToInt32() == _hotkeyId)
+		{
+			HistoryHotkeyPressed?.Invoke(this, EventArgs.Empty);
 			handled = true;
 			return IntPtr.Zero;
 		}
@@ -130,6 +197,7 @@ internal sealed class TrayIcon : IDisposable
 		try
 		{
 			_ = AppendMenuW(menu, _mfString, _menuPanel, Strings.TrayMenuPanel);
+			_ = AppendMenuW(menu, _mfString, _menuHistory, Strings.TrayMenuHistory);
 			_ = AppendMenuW(menu, _mfString | (AutostartChecked ? _mfChecked : 0), _menuAutostart, Strings.TrayMenuAutostart);
 			_ = AppendMenuW(menu, _mfSeparator, 0, "");
 			_ = AppendMenuW(menu, _mfString, _menuSkipCatchUp, Strings.SkipCatchUp);
@@ -146,6 +214,9 @@ internal sealed class TrayIcon : IDisposable
 			{
 				case _menuPanel:
 					PanelRequested?.Invoke(this, EventArgs.Empty);
+					break;
+				case _menuHistory:
+					HistoryMenuRequested?.Invoke(this, EventArgs.Empty);
 					break;
 				case _menuAutostart:
 					AutostartToggled?.Invoke(this, EventArgs.Empty);
@@ -181,6 +252,11 @@ internal sealed class TrayIcon : IDisposable
 			data.uID = _idTray;
 			_ = Shell_NotifyIconW(_nimDelete, ref data);
 			_added = false;
+		}
+
+		if (_source is not null)
+		{
+			_ = UnregisterHotKey(_source.Handle, _hotkeyId);
 		}
 
 		if (_icon != IntPtr.Zero)
@@ -263,6 +339,7 @@ internal sealed class TrayIcon : IDisposable
 	private const uint _nifTip = 0x4;
 	private const uint _wmNull = 0x0;
 	private const uint _wmClose = 0x0010;
+	private const uint _wmHotkey = 0x0312;
 	private const uint _wmLbuttonUp = 0x0202;
 	private const uint _wmLbuttonDblclk = 0x0203;
 	private const uint _wmRbuttonUp = 0x0205;
@@ -288,6 +365,14 @@ internal sealed class TrayIcon : IDisposable
 	[DllImport("user32.dll", SetLastError = true)]
 	[return: MarshalAs(UnmanagedType.Bool)]
 	private static extern bool DestroyIcon(IntPtr hIcon);
+
+	[DllImport("user32.dll", SetLastError = true)]
+	[return: MarshalAs(UnmanagedType.Bool)]
+	private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint modifiers, uint vk);
+
+	[DllImport("user32.dll", SetLastError = true)]
+	[return: MarshalAs(UnmanagedType.Bool)]
+	private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 
 	[DllImport("user32.dll", SetLastError = true)]
 	[return: MarshalAs(UnmanagedType.Bool)]

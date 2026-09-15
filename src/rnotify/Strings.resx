@@ -56,6 +56,7 @@
   <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
   <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
   <data name="TrayMenuPanel" xml:space="preserve"><value>Panel</value></data>
+  <data name="TrayMenuHistory" xml:space="preserve"><value>History</value></data>
   <data name="TrayMenuAutostart" xml:space="preserve"><value>Autostart</value></data>
   <data name="CatchUpRemainingOne" xml:space="preserve"><value>catch-up notification left</value></data>
   <data name="CatchUpRemainingMany" xml:space="preserve"><value>catch-up notifications left: {0}</value></data>
@@ -74,4 +75,14 @@
   <data name="RowSnapshot" xml:space="preserve"><value>Snapshot</value></data>
   <data name="RowStack" xml:space="preserve"><value>Stack</value></data>
   <data name="RowAutostart" xml:space="preserve"><value>Autostart</value></data>
+  <data name="HistoryTitle" xml:space="preserve"><value>RNotify — history</value></data>
+  <data name="HistoryOnlyShown" xml:space="preserve"><value>shown only</value></data>
+  <data name="HistoryRefresh" xml:space="preserve"><value>Refresh</value></data>
+  <data name="HistorySearchHint" xml:space="preserve"><value>search…</value></data>
+  <data name="HistoryCountFormat" xml:space="preserve"><value>{0} of {1}</value></data>
+  <data name="HistoryActionReshow" xml:space="preserve"><value>Show again as card</value></data>
+  <data name="HistoryActionCopy" xml:space="preserve"><value>Copy text</value></data>
+  <data name="HistoryCopySender" xml:space="preserve"><value>Sender</value></data>
+  <data name="HistoryCopyTitle" xml:space="preserve"><value>Title</value></data>
+  <data name="HistoryCopyBody" xml:space="preserve"><value>Body</value></data>
 </root>

@@ -16,10 +16,16 @@ namespace rnotify.Core.Settings;
 /// <param name="CatchUpLimit">S6.4: сколько догоняющих карточек показать при старте (0 — не догонять); остальное молча в floor.</param>
 /// <param name="CatchUpSticky">S6.4: догоняющие без TTL — читает юзер, закрывает юзер; подача по свободным слотам стека.</param>
 /// <param name="CardScreen">S7.1: экран зоны карточек: "cursor" (где мышь, дефолт) | "primary" | "active" (переднее окно).</param>
+/// <param name="HistoryHotkey">S7.2: хоткей панели истории ("Win+Shift+N" — дефолт; парсинг терпит Ctrl/Alt/Shift/Win + клавиша).</param>
+/// <param name="HistoryLimit">S7.2: глубина истории в записях (0 — не хранить; дефолт 1000).</param>
+/// <param name="HistoryOnlyShown">S7.2: панель истории по умолчанию показывает только показанные карточками (фильтр снимается в самой панели).</param>
 public sealed record AppSettings(
 	bool SuppressWithoutListener = false,
 	bool Autostart = false,
 	string? Language = null,
 	int CatchUpLimit = 25,
 	bool CatchUpSticky = true,
-	string? CardScreen = null);
+	string? CardScreen = null,
+	string? HistoryHotkey = null,
+	int HistoryLimit = 1000,
+	bool HistoryOnlyShown = true);
