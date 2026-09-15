@@ -248,8 +248,9 @@ public partial class MainWindow : Window
 	}
 
 	// Панель истории (S7.2): одна на приложение, хоткей/меню; повтор записи —
-	// карточкой-липучкой напрямую в стек (без повторного вердикта правил и
-	// без дублирования в историю).
+	// карточкой в стек напрямую (без повторного вердикта правил и без
+	// дублирования в историю); TTL — настройка historyReshowTtl (дефолт 3m,
+	// «бесконечно» = "sticky" — живой прогон владельца).
 	private void OpenHistory()
 	{
 		if (_history is null)
@@ -264,7 +265,7 @@ public partial class MainWindow : Window
 	{
 		NotificationRecord record = new(
 			0, entry.Aumid, entry.Title, entry.Body, DateTimeOffset.FromUnixTimeSeconds(entry.RaisedUnix));
-		_stack?.Show(record, RuleVerdict.CatchAll with { Ttl = null }, SenderResolver.Resolve(entry.Aumid));
+		_stack?.Show(record, RuleVerdict.CatchAll with { Ttl = RulesEngine.ParseTtl(_settings.HistoryReshowTtl) }, SenderResolver.Resolve(entry.Aumid));
 		AddRow("История", $"повтор: {Truncate($"{entry.Title} — {entry.Body}", 80)}");
 	}
 

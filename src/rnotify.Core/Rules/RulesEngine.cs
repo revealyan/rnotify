@@ -236,7 +236,13 @@ public sealed class RulesEngine
 	// "sticky" → null (без ограничения), "5s"/"3m" — регистр не важен (грабля
 	// старого rnotif: «5S» молча превращалось в дефолт), мусор/пусто → 5 с,
 	// clamp 1–3600 с. Выбраковкой не является никогда.
-	private static TimeSpan? ParseTtl(string? raw)
+	/// <summary>Парсер строки ttl для настройки вне правил ("30s"/"3m"/"sticky") — S7.2.</summary>
+	public static TimeSpan? ParseTtl(string? raw) => ParseTtlInternal(raw);
+
+	// "sticky" → null (без ограничения), "5s"/"3m" — регистр не важен (грабля
+	// старого rnotif: «5S» молча превращалось в дефолт), мусор/пусто → 5 с,
+	// clamp 1–3600 с. Выбраковкой не является никогда.
+	private static TimeSpan? ParseTtlInternal(string? raw)
 	{
 		string value = (raw ?? string.Empty).Trim();
 		if (value.Length == 0)

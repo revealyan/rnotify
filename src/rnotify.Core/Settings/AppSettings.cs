@@ -19,6 +19,7 @@ namespace rnotify.Core.Settings;
 /// <param name="HistoryHotkey">S7.2: хоткей панели истории ("Win+Shift+N" — дефолт; парсинг терпит Ctrl/Alt/Shift/Win + клавиша).</param>
 /// <param name="HistoryLimit">S7.2: глубина истории в записях (0 — не хранить; дефолт 1000).</param>
 /// <param name="HistoryOnlyShown">S7.2: панель истории по умолчанию показывает только показанные карточками (фильтр снимается в самой панели).</param>
+/// <param name="HistoryReshowTtl">S7.2: время жизни повторной карточки — строка как в правилах ("3m" — дефолт; "sticky" — до закрытия руками).</param>
 public sealed record AppSettings(
 	bool SuppressWithoutListener = false,
 	bool Autostart = false,
@@ -28,4 +29,5 @@ public sealed record AppSettings(
 	string? CardScreen = null,
 	string? HistoryHotkey = null,
 	int HistoryLimit = 1000,
-	bool HistoryOnlyShown = true);
+	bool HistoryOnlyShown = true,
+	string HistoryReshowTtl = "3m");
