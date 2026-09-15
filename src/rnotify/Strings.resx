@@ -85,4 +85,17 @@
   <data name="HistoryCopySender" xml:space="preserve"><value>Sender</value></data>
   <data name="HistoryCopyTitle" xml:space="preserve"><value>Title</value></data>
   <data name="HistoryCopyBody" xml:space="preserve"><value>Body</value></data>
+  <data name="TrayMenuRules" xml:space="preserve"><value>Rules…</value></data>
+  <data name="RulesTitle" xml:space="preserve"><value>RNotify — rules</value></data>
+  <data name="RulesAddGroup" xml:space="preserve"><value>+ group</value></data>
+  <data name="RulesRemoveGroup" xml:space="preserve"><value>− group</value></data>
+  <data name="RulesAddRule" xml:space="preserve"><value>+ rule</value></data>
+  <data name="RulesRemoveRule" xml:space="preserve"><value>− rule</value></data>
+  <data name="RulesSave" xml:space="preserve"><value>Save</value></data>
+  <data name="RulesCancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="RulesSaved" xml:space="preserve"><value>saved — engine reloaded</value></data>
+  <data name="RulesGroupEnabled" xml:space="preserve"><value>on</value></data>
+  <data name="RulesNoGroup" xml:space="preserve"><value>(no group)</value></data>
+  <data name="RulesNoRule" xml:space="preserve"><value>(no rule)</value></data>
+  <data name="RulesMatchAuto" xml:space="preserve"><value>(default: regex)</value></data>
 </root>

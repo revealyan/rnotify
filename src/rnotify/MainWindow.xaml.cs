@@ -12,6 +12,7 @@ using rnotify.Core.Rules;
 using rnotify.Core.History;
 using rnotify.Core.Settings;
 using rnotify.History;
+using rnotify.Rules;
 using rnotify.Core.Suppression;
 using rnotify.Render;
 using rnotify.Tray;
@@ -41,6 +42,7 @@ public partial class MainWindow : Window
 	private NotificationFeed? _feed;
 	private UserNotificationSource? _source;
 	private RulesReloader? _rules;
+	private RulesStore? _rulesStore;
 	private RulesMonitor? _rulesMonitor;
 	private CardStack? _stack;
 	private NativeBannerSuppressor? _suppressor;
@@ -207,10 +209,15 @@ public partial class MainWindow : Window
 			_tray.SkipCatchUpRequested += OnTraySkipCatchUp;
 			_tray.HistoryHotkeyPressed += (_, _) => OpenHistory();
 			_tray.HistoryMenuRequested += (_, _) => OpenHistory();
+			_tray.RulesHotkeyPressed += (_, _) => OpenRules();
+			_tray.RulesMenuRequested += (_, _) => OpenRules();
 			string hotkey = _settings.HistoryHotkey ?? "Win+Shift+N";
 			AddRow("История", _tray.TryRegisterHotkey(hotkey)
 				? $"{hotkey} + меню трея; глубина {_settings.HistoryLimit}"
 				: $"хоткей {hotkey} не встал (занят?) — открывать из меню трея");
+			string rulesHotkey = _settings.RulesHotkey ?? "Ctrl+Shift+N";
+			_ = _tray.TryRegisterRulesHotkey(rulesHotkey); // занятость скажет строкой ниже
+			AddRow("Правила UI", $"{rulesHotkey} + меню трея (rulesHotkey)");
 			_tray.AutostartChecked = _settings.Autostart;
 			_tray.Show();
 			AddRow(Strings.RowTray, "иконка в области уведомлений (закрытие окна = свернуть сюда)");
@@ -244,6 +251,16 @@ public partial class MainWindow : Window
 		catch (Exception ex)
 		{
 			AddRow(Strings.RowAutostart, $"не переключился: {ex.Message}");
+		}
+	}
+
+	// Редактор правил (S7.3): одна на приложение; сохранение — через
+	// RulesStore (атомарно), хот-релоад подхватывает и говорит строкой сам.
+	private void OpenRules()
+	{
+		if (_rulesStore is not null)
+		{
+			RulesWindow.ShowSingle(_rulesStore);
 		}
 	}
 
@@ -281,6 +298,7 @@ public partial class MainWindow : Window
 	private void StartRules()
 	{
 		RulesStore store = new();
+		_rulesStore = store;
 		_rules = new RulesReloader(store);
 		if (_rules.StartupError is { } error)
 		{
