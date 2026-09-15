@@ -39,6 +39,9 @@ public static class Strings
 	/// <summary>Меню трея: открыть панель.</summary>
 	public static string TrayMenuPanel => Get("TrayMenuPanel", "Panel");
 
+	/// <summary>Меню трея: панель истории.</summary>
+	public static string TrayMenuHistory => Get("TrayMenuHistory", "History");
+
 	/// <summary>Меню трея: автозапуск.</summary>
 	public static string TrayMenuAutostart => Get("TrayMenuAutostart", "Autostart");
 
@@ -89,6 +92,28 @@ public static class Strings
 
 	/// <summary>Ключ строки: стек карточек.</summary>
 	public static string RowStack => Get("RowStack", "Stack");
+
+
+	/// <summary>История: RNotify — history.</summary>
+	public static string HistoryTitle => Get("HistoryTitle", "RNotify — history");
+	/// <summary>История: shown only.</summary>
+	public static string HistoryOnlyShown => Get("HistoryOnlyShown", "shown only");
+	/// <summary>История: Refresh.</summary>
+	public static string HistoryRefresh => Get("HistoryRefresh", "Refresh");
+	/// <summary>История: search….</summary>
+	public static string HistorySearchHint => Get("HistorySearchHint", "search…");
+	/// <summary>История: {0} of {1}.</summary>
+	public static string HistoryCountFormat => Get("HistoryCountFormat", "{0} of {1}");
+	/// <summary>История: Show again as card.</summary>
+	public static string HistoryActionReshow => Get("HistoryActionReshow", "Show again as card");
+	/// <summary>История: Copy text.</summary>
+	public static string HistoryActionCopy => Get("HistoryActionCopy", "Copy text");
+	/// <summary>История: Sender.</summary>
+	public static string HistoryCopySender => Get("HistoryCopySender", "Sender");
+	/// <summary>История: Title.</summary>
+	public static string HistoryCopyTitle => Get("HistoryCopyTitle", "Title");
+	/// <summary>История: Body.</summary>
+	public static string HistoryCopyBody => Get("HistoryCopyBody", "Body");
 
 	/// <summary>Ключ строки: автозапуск.</summary>
 	public static string RowAutostart => Get("RowAutostart", "Autostart");

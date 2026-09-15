@@ -9,7 +9,9 @@ using Windows.ApplicationModel;
 using rnotify.Core;
 using rnotify.Core.Listener;
 using rnotify.Core.Rules;
+using rnotify.Core.History;
 using rnotify.Core.Settings;
+using rnotify.History;
 using rnotify.Core.Suppression;
 using rnotify.Render;
 using rnotify.Tray;
@@ -44,6 +46,7 @@ public partial class MainWindow : Window
 	private NativeBannerSuppressor? _suppressor;
 	private TrayIcon? _tray;
 	private NotificationFloor? _floor;
+	private HistoryStore? _history;
 	private readonly Queue<NotificationRecord> _catchUpQueue = [];
 	private System.Windows.Threading.DispatcherTimer? _catchUpPacer;
 	private CatchUpBanner? _catchUpBanner;
@@ -96,8 +99,9 @@ public partial class MainWindow : Window
 			StartRules();
 
 			// Floor «что уже обработано» — до фида: догонялка после старта
-			// сверяет backlog по нему (S6.4).
+			// сверяет backlog по нему (S6.4). История — туда же (S7.2).
 			_floor = new NotificationFloor();
+			_history = new HistoryStore(_settings.HistoryLimit);
 
 			// Стек — до старта фида: события подписываются раньше StartAsync,
 			// первый Added не должен прийти без стека. Трейс стека — всегда на
@@ -201,6 +205,12 @@ public partial class MainWindow : Window
 			_tray.ExitRequested += OnTrayExit;
 			_tray.AutostartToggled += OnTrayAutostart;
 			_tray.SkipCatchUpRequested += OnTraySkipCatchUp;
+			_tray.HistoryHotkeyPressed += (_, _) => OpenHistory();
+			_tray.HistoryMenuRequested += (_, _) => OpenHistory();
+			string hotkey = _settings.HistoryHotkey ?? "Win+Shift+N";
+			AddRow("История", _tray.TryRegisterHotkey(hotkey)
+				? $"{hotkey} + меню трея; глубина {_settings.HistoryLimit}"
+				: $"хоткей {hotkey} не встал (занят?) — открывать из меню трея");
 			_tray.AutostartChecked = _settings.Autostart;
 			_tray.Show();
 			AddRow(Strings.RowTray, "иконка в области уведомлений (закрытие окна = свернуть сюда)");
@@ -235,6 +245,28 @@ public partial class MainWindow : Window
 		{
 			AddRow(Strings.RowAutostart, $"не переключился: {ex.Message}");
 		}
+	}
+
+	// Панель истории (S7.2): одна на приложение, хоткей/меню; повтор записи —
+	// карточкой в стек напрямую (без повторного вердикта правил и без
+	// дублирования в историю); TTL — настройка historyReshowTtl (дефолт 3m,
+	// «бесконечно» = "sticky" — живой прогон владельца).
+	private void OpenHistory()
+	{
+		if (_history is null)
+		{
+			return;
+		}
+
+		HistoryWindow.ShowSingle(_history.SnapshotNewestFirst, _settings.HistoryOnlyShown, OnHistoryReshow);
+	}
+
+	private void OnHistoryReshow(HistoryEntry entry)
+	{
+		NotificationRecord record = new(
+			0, entry.Aumid, entry.Title, entry.Body, DateTimeOffset.FromUnixTimeSeconds(entry.RaisedUnix));
+		_stack?.Show(record, RuleVerdict.CatchAll with { Ttl = RulesEngine.ParseTtl(_settings.HistoryReshowTtl) }, SenderResolver.Resolve(entry.Aumid));
+		AddRow("История", $"повтор: {Truncate($"{entry.Title} — {entry.Body}", 80)}");
 	}
 
 	// Меню трея «Выход»: единственный путь к настоящей разборке (OnClosing
@@ -365,6 +397,9 @@ public partial class MainWindow : Window
 		_suppressor?.BlanketSender(record.Aumid);
 		ApplyNativeRemoval(verdict, id);
 		_floor?.MarkSeen(record);
+		_history?.Add(new HistoryEntry(
+			record.RaisedAt.ToUnixTimeSeconds(), record.Aumid, senderInfo.Name, record.Title, record.Body,
+			verdict.Action.ToString().ToLowerInvariant()));
 	}
 
 	// S6.4 «догоняющие» (правило владельца: показать то, что не увидели).
